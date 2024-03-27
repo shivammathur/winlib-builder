@@ -12,6 +12,10 @@ on:
         description: the series stability
         required: false
         default: 'staging'
+      repo:
+        description: curl repo
+        required: false
+        default: 'winlibs/curl'
 defaults:
   run:
     shell: cmd
