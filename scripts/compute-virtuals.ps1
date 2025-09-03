@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)] [String] $version,
-    [Parameter(Mandatory)] [String] $arch
+    [Parameter(Mandatory)] [String] $arch,
+    [switch] $SkipToolsetCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,7 +46,7 @@ foreach ($ts in (Get-ChildItem $dir)) {
     }
 }
 $toolset = $toolsets.$vs
-if (-not $toolset) {
+if (-not $toolset -and -not $SkipToolsetCheck) {
     throw "no suitable toolset available"
 }
 

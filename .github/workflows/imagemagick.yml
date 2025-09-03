@@ -17,53 +17,59 @@ jobs:
       fail-fast: false
       matrix:
           arch: [x64, x86]
-    runs-on: ${{ inputs.php >= '8.4' && 'windows-2022' || 'windows-2019' }}
+    runs-on: windows-2022
     steps:
       - name: Checkout winlib-builder
         uses: actions/checkout@v5
         with:
           path: winlib-builder
-      - name: Checkout imagemagick-windows
+      - name: Checkout ImageMagick/Windows
         uses: actions/checkout@v5
         with:
-          path: imagemagick-windows
-          repository: ImageMagick/ImageMagick-Windows.git
+          path: Windows
+          repository: ImageMagick/Windows.git
           ref: main
-      - name: Checkout imagemagick
+      - name: Checkout ImageMagick
         uses: actions/checkout@v5
         with:
-          path: imagemagick
+          path: Windows\ImageMagick
           repository: ImageMagick/ImageMagick.git
           ref: ${{ inputs.tag }}
       - name: Setup msbuild
         uses: microsoft/setup-msbuild@v2
       - name: Compute virtual inputs
         id: virtuals
-        run: powershell winlib-builder/scripts/compute-virtuals -version ${{github.event.inputs.php}} -arch ${{matrix.arch}}
+        run: powershell winlib-builder/scripts/compute-virtuals -version ${{github.event.inputs.php}} -arch ${{matrix.arch}} -SkipToolsetCheck
+      - name: Add missing vs components
+        if: ${{ steps.virtuals.outputs.vsnum != '17' }}
+        shell: pwsh
+        run: powershell winlib-builder/scripts/add-vs-components ${{ steps.virtuals.outputs.vsnum }} -AddATL -AddMFC
       - name: Fetch dependencies
-        run: cd imagemagick-windows && CloneRepositories.IM7.cmd
+        run: cd Windows && clone-repositories-im7.cmd
       - name: Patch imagemagick
         run: |
-          cd imagemagick-windows\configure && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick.patch
+          cd Windows\Configure && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick.patch && cd ..\..
           if "${{steps.virtuals.outputs.vsnum}}" neq "17" (
-            cd ..\imagemagick && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-ma.patch
+            cd Windows\Imagemagick && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-ma.patch
             git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-emf.patch
-          )
-          if "${{steps.virtuals.outputs.vsnum}}" == "15" (
-            cd ..\Dependencies\heif && git apply --ignore-whitespace ..\..\..\winlib-builder\patches\heif.patch
           )
       - name: Configure imagemagick
         run: |
-          cd imagemagick-windows\configure
-          msbuild /p:Configuration=Release;Platform=${{inputs.php >= '8.4' && matrix.arch || 'win32' }};PlatformToolset=${{steps.virtuals.outputs.msts}};WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} ${{inputs.php >= '8.4' && 'configure.sln' || 'configure.2017.sln' }}
+          cd Windows\Configure
+          if "${{steps.virtuals.outputs.vsnum}}" neq "15" (
+            msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}} configure.sln
+          ) else (
+            msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}},WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} configure.sln
+          )
+          cp Artifacts\Release\${{matrix.arch}}\bin\Configure.Release.${{matrix.arch}}.exe configure.exe
           start /wait configure /noWizard /${{matrix.arch}} /noHdri /noOpenCL /deprecated /VS${{steps.virtuals.outputs.vsyear}}
       - name: Build imagemagick
         run: |
-          cd imagemagick-windows
-          msbuild /p:Configuration=Release;Platform=${{matrix.arch}};PlatformToolset=${{steps.virtuals.outputs.msts}};WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} IM7.Dynamic.${{ matrix.arch }}.sln
+          cd Windows
+          msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}} IM7.Dynamic.${{ matrix.arch }}.sln
       - name: Install imagemagick
         run: |
-          cd imagemagick-windows\Artifacts
+          cd Windows\Artifacts
           xcopy bin\* ..\..\install\bin\*
           del ..\..\install\bin\CORE_RL_aom_.pdb
           del ..\..\install\bin\CORE_RL_brotli_.pdb
@@ -90,6 +96,9 @@ jobs:
           del ..\..\install\lib\CORE_RL_pixman_.pdb
           del ..\..\install\lib\CORE_RL_raqm_.pdb
           xcopy ..\ImageMagick\LICENSE ..\..\install\*
+      - name: Tmate
+        if: failure()
+        uses: mxschmitt/action-tmate@v3
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
