@@ -51,22 +51,21 @@ jobs:
           cd Windows\Configure && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick.patch && cd ..\..
           if "${{steps.virtuals.outputs.vsnum}}" neq "17" (
             cd Windows\Imagemagick && git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-ma.patch
-            git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-emf.patch
+            git apply --ignore-whitespace ..\..\winlib-builder\patches\imagemagick-emf.patch && cd ..\..
+          )
+          if "${{steps.virtuals.outputs.vsnum}}" == "15" (
+            cd Windows\Dependencies\Dependencies\heif && git apply --ignore-whitespace ..\..\..\..\winlib-builder\patches\heif.patch
           )
       - name: Configure imagemagick
         run: |
           cd Windows\Configure
-          if "${{steps.virtuals.outputs.vsnum}}" neq "15" (
-            msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}} configure.sln
-          ) else (
-            msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}},WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} configure.sln
-          )
+          msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}},WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} configure.sln
           cp Artifacts\Release\${{matrix.arch}}\bin\Configure.Release.${{matrix.arch}}.exe configure.exe
           start /wait configure /noWizard /${{matrix.arch}} /noHdri /noOpenCL /deprecated /VS${{steps.virtuals.outputs.vsyear}}
       - name: Build imagemagick
         run: |
           cd Windows
-          msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}} IM7.Dynamic.${{ matrix.arch }}.sln
+          msbuild /p:Configuration=Release,Platform=${{matrix.arch}},PlatformToolset=${{steps.virtuals.outputs.msts}},WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}} IM7.Dynamic.${{ matrix.arch }}.sln
       - name: Install imagemagick
         run: |
           cd Windows\Artifacts

@@ -1,20 +1,32 @@
  Configs/coders/Config.emf.txt | 3 +++
+ Configs/coders/Config.exr.txt | 1 +
  src/CommandLineInfo.cpp       | 4 ++--
  src/Options.cpp               | 3 ---
  src/Project.cpp               | 4 +---
- 4 files changed, 6 insertions(+), 8 deletions(-)
+ 5 files changed, 7 insertions(+), 8 deletions(-)
  create mode 100644 Configs/coders/Config.emf.txt
 
 diff --git a/Configs/coders/Config.emf.txt b/Configs/coders/Config.emf.txt
 new file mode 100644
-index 0000000..31d1a03
+index 0000000..37a08d6
 --- /dev/null
 +++ b/Configs/coders/Config.emf.txt
 @@ -0,0 +1,3 @@
 +[CODER]
 +
 +[MAGICK_PROJECT]
-\ No newline at end of file
+diff --git a/Configs/coders/Config.exr.txt b/Configs/coders/Config.exr.txt
+index 9b01923..8271656 100644
+--- a/Configs/coders/Config.exr.txt
++++ b/Configs/coders/Config.exr.txt
+@@ -2,6 +2,7 @@
+ 
+ [DYNAMIC_DEFINES]
+ OPENEXR_DLL
++NOMINMAX
+ 
+ [REFERENCES]
+ exr
 diff --git a/src/CommandLineInfo.cpp b/src/CommandLineInfo.cpp
 index 85ec741..05785c1 100644
 --- a/src/CommandLineInfo.cpp
