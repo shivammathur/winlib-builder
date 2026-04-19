@@ -25,6 +25,29 @@ Copy-TreeContents -Source (Join-Path $DepsRoot 'include') -Destination $packageI
 Copy-TreeContents -Source (Join-Path $ApriconvRoot 'include') -Destination $packageIncludeRoot
 Copy-TreeContents -Source (Join-Path $installRoot 'include') -Destination $packageIncludeRoot
 
+# Normalize APR's GNU-attribute fallback so MSVC consumers can compile against
+# the packaged headers even when __has_attribute is predefined.
+$aprHeader = Join-Path $packageIncludeRoot 'apr.h'
+if (Test-Path $aprHeader) {
+    $aprAttributeFallback = @'
+#if !(defined(__attribute__) || defined(__has_attribute))
+#define __attribute__(__x)
+#endif
+'@
+    $msvcAprAttributeFallback = @'
+#if !defined(__GNUC__) && !defined(__attribute__)
+#define __attribute__(__x)
+#endif
+'@
+
+    $aprContents = Get-Content -Path $aprHeader -Raw
+    $normalizedAprContents = $aprContents.Replace($aprAttributeFallback, $msvcAprAttributeFallback)
+
+    if ($normalizedAprContents -ne $aprContents) {
+        Set-Content -Path $aprHeader -Value $normalizedAprContents -NoNewline
+    }
+}
+
 Copy-TreeContents -Source (Join-Path $DepsRoot 'lib') -Destination $packageLibRoot
 Copy-TreeContents -Source (Join-Path $ApriconvRoot 'lib') -Destination $packageLibRoot
 Copy-TreeContents -Source (Join-Path $installRoot 'lib') -Destination $packageLibRoot
