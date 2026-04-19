@@ -1,5 +1,8 @@
 name: Build apache
 on:
+  push:
+    branches:
+      - build-apache
   workflow_dispatch:
     inputs:
       version:
@@ -10,8 +13,8 @@ on:
         required: true
 env:
   APR_ICONV_VERSION: 1.2.2
-  APACHE_VERSION: ${{ github.event.inputs.version }}
-  PHP_VERSION: ${{ github.event.inputs.php }}
+  APACHE_VERSION: ${{ github.event.inputs.version || '2.4.66' }}
+  PHP_VERSION: ${{ github.event.inputs.php || '8.2' }}
 defaults:
   run:
     shell: cmd
