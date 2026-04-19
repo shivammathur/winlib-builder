@@ -1,5 +1,8 @@
 name: Build apache
 on:
+  push:
+    branches:
+      - build-apache
   workflow_dispatch:
     inputs:
       version:
@@ -10,6 +13,8 @@ on:
         required: true
 env:
   APR_ICONV_VERSION: 1.2.2
+  APACHE_VERSION: ${{ github.event.inputs.version || '2.4.66' }}
+  PHP_VERSION: ${{ github.event.inputs.php || '8.2' }}
 defaults:
   run:
     shell: cmd
@@ -31,7 +36,7 @@ jobs:
         with:
           path: httpd
           repository: apache/httpd
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ env.APACHE_VERSION }}
 
       - name: Determine apache build profile
         id: httpd_profile
@@ -39,7 +44,7 @@ jobs:
 
       - name: Compute virtual inputs
         id: virtuals
-        run: powershell winlib-builder/scripts/compute-virtuals -version ${{ github.event.inputs.php }} -arch ${{ matrix.arch }}
+        run: powershell winlib-builder/scripts/compute-virtuals -version ${{ env.PHP_VERSION }} -arch ${{ matrix.arch }}
 
       - name: Setup MSVC development environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -106,5 +111,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: apache-${{ github.event.inputs.version }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
+          name: apache-${{ env.APACHE_VERSION }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
           path: install
