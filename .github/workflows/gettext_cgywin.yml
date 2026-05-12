@@ -72,7 +72,8 @@ jobs:
           cl_path="$(win_to_cygpath "$(cmd /c where cl.exe | tr -d '\r' | head -n 1)")"
           tool_dir="$(dirname "$cl_path")"
           export PATH="$tool_dir:/usr/bin:$PATH"
-          mkdir -p "$prefix"
+          static_pdb="$(cygpath -w "$prefix/lib/libintl_a.pdb" | sed 's/\\/\\\\/g')"
+          mkdir -p "$prefix/lib"
           cd "$runtime"
           ./configure \
             --host="$HOST_TRIPLET" \
@@ -80,16 +81,16 @@ jobs:
             --enable-shared \
             --enable-static \
             CC="$runtime/../build-aux/compile cl -nologo" \
-            CFLAGS="-MD -O2 -Zi -FS" \
+            CFLAGS="-MD -O2 -Zi -FS /Fd$static_pdb" \
             CXX="$runtime/../build-aux/compile cl -nologo" \
-            CXXFLAGS="-MD -O2 -Zi -FS" \
+            CXXFLAGS="-MD -O2 -Zi -FS /Fd$static_pdb" \
             CPPFLAGS="-D_WIN32_WINNT=0x0601" \
             LDFLAGS="-Wl,-DEBUG" \
             LD="link.exe" \
             NM="dumpbin.exe -symbols" \
             STRIP=":" \
             AR="$workspace/winlib-builder/autotools/ar-lib lib.exe" \
-            RANLIB=":"
+            RANLIB=":" || { cat config.log; exit 1; }
           touch aclocal.m4 configure config.h.in Makefile.in
           touch intl/aclocal.m4 intl/configure intl/config.h.in intl/Makefile.in intl/gnulib-lib/Makefile.in
           perl -0pi -e 's/ -version-info \$\(LTV_CURRENT\):\$\(LTV_REVISION\):\$\(LTV_AGE\) \\\n/ -avoid-version \\\n/' intl/Makefile
@@ -112,11 +113,14 @@ jobs:
           $searchRoots = @('install', 'gettext/gettext-runtime/intl')
           function Copy-First {
             param([string[]] $Patterns, [string] $Destination)
+            $destinationPath = [System.IO.Path]::GetFullPath($Destination)
             foreach ($root in $searchRoots) {
               foreach ($pattern in $Patterns) {
                 $match = Get-ChildItem -Path $root -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($match) {
-                  Copy-Item $match.FullName $Destination -Force
+                  if ([System.IO.Path]::GetFullPath($match.FullName) -ne $destinationPath) {
+                    Copy-Item $match.FullName $Destination -Force
+                  }
                   return $true
                 }
               }
@@ -162,6 +166,8 @@ jobs:
           cl /nologo /I install\include %TEMP%\gettext-qa.c install\lib\libintl.lib /Fe:%TEMP%\gettext-qa.exe
           dumpbin /dependents %TEMP%\gettext-qa.exe
           dumpbin /dependents %TEMP%\gettext-qa.exe | findstr /i "libintl.dll"
+          powershell -NoProfile -Command "$text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('install\lib\libintl_a.lib')); if ($text -match 'vc[0-9]+\.pdb') { throw 'libintl_a.lib still references vc*.pdb' }; if ($text -notmatch 'libintl_a\.pdb') { throw 'libintl_a.lib does not reference libintl_a.pdb' }"
+          if errorlevel 1 exit /b %ERRORLEVEL%
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
