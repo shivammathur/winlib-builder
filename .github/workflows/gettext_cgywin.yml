@@ -66,7 +66,7 @@ jobs:
             printf '%s\n' "$path"
           }
           workspace="$(win_to_cygpath "$GITHUB_WORKSPACE")"
-          runtime="$workspace/gettext/source/gettext-runtime"
+          runtime="$workspace/gettext/gettext-runtime"
           src="$runtime/intl"
           prefix="$workspace/install"
           cl_path="$(win_to_cygpath "$(cmd /c where cl.exe | tr -d '\r' | head -n 1)")"
@@ -109,7 +109,7 @@ jobs:
           LIB_MACHINE: ${{matrix.arch == 'x64' && 'X64' || 'X86'}}
         run: |
           New-Item -ItemType Directory -Force -Path install/bin, install/include, install/lib | Out-Null
-          $searchRoots = @('install', 'gettext/source/gettext-runtime/intl')
+          $searchRoots = @('install', 'gettext/gettext-runtime/intl')
           function Copy-First {
             param([string[]] $Patterns, [string] $Destination)
             foreach ($root in $searchRoots) {
@@ -126,14 +126,14 @@ jobs:
           Copy-First @('libintl.dll', 'intl.dll', 'intl-*.dll') 'install/bin/libintl.dll' | Out-Null
           Copy-First @('libintl.pdb', 'intl.pdb', 'intl-*.pdb') 'install/bin/libintl.pdb' | Out-Null
           if (!(Test-Path 'install/include/libintl.h')) {
-            Copy-Item 'gettext/source/gettext-runtime/intl/libintl.h' 'install/include/libintl.h' -Force
+            Copy-Item 'gettext/gettext-runtime/intl/libintl.h' 'install/include/libintl.h' -Force
           }
           Copy-First @('libintl.dll.lib', 'intl.dll.lib', 'intl-*.dll.lib', 'libintl.lib') 'install/lib/libintl.lib' | Out-Null
           if (!(Test-Path 'install/lib/libintl_a.lib')) {
             Copy-First @('libintl_a.lib', 'intl.lib') 'install/lib/libintl_a.lib' | Out-Null
           }
           Copy-First @('libintl_a.pdb', 'intl_a.pdb', 'vc*.pdb') 'install/lib/libintl_a.pdb' | Out-Null
-          $exports = Get-ChildItem -Path 'gettext/source/gettext-runtime/intl' -Recurse -Force -File -ErrorAction SilentlyContinue |
+          $exports = Get-ChildItem -Path 'gettext/gettext-runtime/intl' -Recurse -Force -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -like 'intl*.dll.def' -or $_.Name -like 'libintl*.dll.def' -or $_.Name -eq 'intl.expsym' } |
             Sort-Object @{ Expression = { if ($_.Name -like '*.def') { 0 } else { 1 } } } |
             Select-Object -First 1
