@@ -8,6 +8,10 @@ on:
       php:
         description: PHP version to build for
         required: true
+      verify_issue_8:
+        description: Build Debug x64 and run libffi issue 8 verifier
+        required: false
+        default: 'false'
 defaults:
   run:
     shell: cmd
@@ -35,6 +39,25 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       - name: Build libffi
         run: cd libffi\win32\${{steps.virtuals.outputs.vs}}_${{matrix.arch}} && msbuild libffi-msvc.sln /p:Configuration=Release;Platform=${{steps.virtuals.outputs.msarch}};PlatformToolset=${{steps.virtuals.outputs.msts}};WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}}
+      - name: Build Debug libffi for issue 8
+        if: github.event.inputs.verify_issue_8 == 'true' && matrix.arch == 'x64'
+        run: cd libffi\win32\${{steps.virtuals.outputs.vs}}_${{matrix.arch}} && msbuild libffi-msvc.sln /p:Configuration=Debug;Platform=${{steps.virtuals.outputs.msarch}};PlatformToolset=${{steps.virtuals.outputs.msts}};WindowsTargetPlatformVersion=${{steps.virtuals.outputs.winsdk}}
+      - name: Verify issue 8 Release build
+        if: github.event.inputs.verify_issue_8 == 'true' && matrix.arch == 'x64'
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSINSTALL=%%i
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          set LIBFFI_LIB=libffi\win32\${{steps.virtuals.outputs.vs}}_${{matrix.arch}}\x64\Release
+          cl.exe /nologo /W4 /WX /wd4201 /MD /DFFI_STATIC_BUILD /I libffi\include /I libffi\src\x86 /I libffi winlib-builder\scripts\libffi\verify-issue-8.c /Fe:verify-issue-8-release.exe /link /LIBPATH:%LIBFFI_LIB% libffi.lib || exit /b 1
+          verify-issue-8-release.exe || exit /b 1
+      - name: Verify issue 8 Debug build
+        if: github.event.inputs.verify_issue_8 == 'true' && matrix.arch == 'x64'
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSINSTALL=%%i
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          set LIBFFI_LIB=libffi\win32\${{steps.virtuals.outputs.vs}}_${{matrix.arch}}\x64\Debug
+          cl.exe /nologo /W4 /WX /wd4201 /MDd /DFFI_STATIC_BUILD /I libffi\include /I libffi\src\x86 /I libffi winlib-builder\scripts\libffi\verify-issue-8.c /Fe:verify-issue-8-debug.exe /link /LIBPATH:%LIBFFI_LIB% libffi.lib || exit /b 1
+          verify-issue-8-debug.exe || exit /b 1
       - name: Install libffi
         run: |
           cd libffi
