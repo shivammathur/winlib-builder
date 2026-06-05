@@ -1,0 +1,39 @@
+{
+  "$schema": "../schema.json",
+  "component": "apache",
+  "aliases": [
+    "httpd"
+  ],
+  "version": {
+    "stripPrefixes": [
+      "apache-",
+      "httpd-"
+    ]
+  },
+  "upstream": {
+    "repository": "apache/httpd",
+    "tagTemplate": "{version}"
+  },
+  "license": {
+    "id": "Apache-2.0"
+  },
+  "purl": "pkg:generic/apache-httpd@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:apache:http_server:{upstreamVersion}:*:*:*:*:*:*:*",
+  "components": [
+    {
+      "component": "apr-iconv",
+      "sourcePath": "apr-iconv-source/apr-iconv-1.2.2",
+      "version": {
+        "value": "1.2.2"
+      },
+      "upstream": {
+        "repository": "apache/apr-iconv",
+        "tagTemplate": "{version}"
+      },
+      "license": {
+        "id": "Apache-2.0"
+      },
+      "purl": "pkg:generic/apr-iconv@{upstreamVersion}"
+    }
+  ]
+}

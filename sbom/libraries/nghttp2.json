@@ -1,0 +1,19 @@
+{
+  "$schema": "../schema.json",
+  "component": "nghttp2",
+  "version": {
+    "stripPrefixes": [
+      "nghttp2-",
+      "v"
+    ]
+  },
+  "upstream": {
+    "repository": "nghttp2/nghttp2",
+    "tagTemplate": "v{version}"
+  },
+  "license": {
+    "id": "MIT"
+  },
+  "purl": "pkg:generic/nghttp2@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:nghttp2:nghttp2:{upstreamVersion}:*:*:*:*:*:*:*"
+}

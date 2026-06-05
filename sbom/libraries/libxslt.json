@@ -1,0 +1,19 @@
+{
+  "$schema": "../schema.json",
+  "component": "libxslt",
+  "version": {
+    "stripPrefixes": [
+      "libxslt-",
+      "v"
+    ]
+  },
+  "upstream": {
+    "repository": "GNOME/libxslt",
+    "tagTemplate": "v{version}"
+  },
+  "license": {
+    "id": "MIT"
+  },
+  "purl": "pkg:generic/libxslt@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:xmlsoft:libxslt:{upstreamVersion}:*:*:*:*:*:*:*"
+}

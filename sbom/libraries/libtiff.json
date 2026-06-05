@@ -1,0 +1,18 @@
+{
+  "$schema": "../schema.json",
+  "component": "libtiff",
+  "version": {
+    "stripPrefixes": ["libtiff-", "v"]
+  },
+  "upstream": {
+    "url": "https://gitlab.com/libtiff/libtiff",
+    "tagTemplate": "v{version}",
+    "tagUrlTemplate": "https://gitlab.com/libtiff/libtiff/-/tree/{sourceTag}"
+  },
+  "homepage": "https://libtiff.gitlab.io/libtiff/",
+  "license": {
+    "id": "libtiff"
+  },
+  "purl": "pkg:generic/libtiff@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:libtiff:libtiff:{upstreamVersion}:*:*:*:*:*:*:*"
+}

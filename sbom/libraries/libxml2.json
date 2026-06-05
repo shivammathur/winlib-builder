@@ -1,0 +1,154 @@
+{
+  "$schema": "../schema.json",
+  "component": "libxml2",
+  "aliases": [
+    "libxml"
+  ],
+  "version": {
+    "stripPrefixes": [
+      "libxml2-",
+      "libxml-"
+    ]
+  },
+  "upstream": {
+    "repository": "GNOME/libxml2",
+    "tagTemplate": "v{version}"
+  },
+  "license": {
+    "id": "MIT"
+  },
+  "purl": "pkg:generic/libxml2@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:xmlsoft:libxml2:{upstreamVersion}:*:*:*:*:*:*:*",
+  "patchedBuilds": [
+    {
+      "tag": "libxml2-2.9.10-1",
+      "upstream": {
+        "repository": "GNOME/libxml2",
+        "tag": "v2.9.10",
+        "version": "2.9.10"
+      },
+      "fork": {
+        "repository": "winlibs/libxml2",
+        "tag": "libxml2-2.9.10-1"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2021-3541",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-3541",
+          "detail": "Fixed by winlibs/libxml2 parameter entity expansion backport in tag libxml2-2.9.10-1."
+        }
+      ]
+    },
+    {
+      "tag": "libxml2-2.9.14-4",
+      "upstream": {
+        "repository": "GNOME/libxml2",
+        "tag": "v2.9.14",
+        "version": "2.9.14"
+      },
+      "fork": {
+        "repository": "winlibs/libxml2",
+        "tag": "libxml2-2.9.14-4"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-27113",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-27113",
+          "detail": "Fixed by winlibs/libxml2 backport in tag libxml2-2.9.14-1."
+        }
+      ]
+    },
+    {
+      "tag": "libxml2-2.10.4-6",
+      "upstream": {
+        "repository": "GNOME/libxml2",
+        "tag": "v2.10.4",
+        "version": "2.10.4"
+      },
+      "fork": {
+        "repository": "winlibs/libxml2",
+        "tag": "libxml2-2.10.4-6"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-27113",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-27113",
+          "detail": "Fixed by winlibs/libxml2 backport in tag libxml2-2.10.4-1."
+        },
+        {
+          "id": "CVE-2025-49794",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-49794",
+          "detail": "Fixed by winlibs/libxml2 schematron backport in tag libxml2-2.10.4-4."
+        },
+        {
+          "id": "CVE-2025-49796",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-49796",
+          "detail": "Fixed by winlibs/libxml2 schematron backport in tag libxml2-2.10.4-4."
+        },
+        {
+          "id": "CVE-2025-7425",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-7425",
+          "detail": "Fixed by preserving libxslt private flag bits in winlibs/libxml2 tag libxml2-2.10.4-6.",
+          "references": [
+            "https://gitlab.gnome.org/GNOME/libxslt/-/issues/139",
+            "https://gitlab.gnome.org/GNOME/libxml2/-/commit/f1e1f13b766eb580a8dcc0c4e7a447346dfd862e"
+          ]
+        },
+        {
+          "id": "CVE-2025-8732",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-8732",
+          "detail": "Fixed by SGML catalog recursion limit backport in winlibs/libxml2 tag libxml2-2.10.4-5.",
+          "references": [
+            "https://gitlab.gnome.org/GNOME/libxml2/-/commit/eae9291aa73907694dd3a4274d306e31217e746e"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "libxml2-2.11.9-6",
+      "upstream": {
+        "repository": "GNOME/libxml2",
+        "tag": "v2.11.9",
+        "version": "2.11.9"
+      },
+      "fork": {
+        "repository": "winlibs/libxml2",
+        "tag": "libxml2-2.11.9-6"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-27113",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-27113",
+          "detail": "Fixed by winlibs/libxml2 backport in tag libxml2-2.11.9-1."
+        },
+        {
+          "id": "CVE-2025-7425",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-7425",
+          "detail": "Fixed by preserving libxslt private flag bits in winlibs/libxml2 tag libxml2-2.11.9-6.",
+          "references": [
+            "https://gitlab.gnome.org/GNOME/libxslt/-/issues/139",
+            "https://gitlab.gnome.org/GNOME/libxml2/-/commit/f1e1f13b766eb580a8dcc0c4e7a447346dfd862e"
+          ]
+        },
+        {
+          "id": "CVE-2025-8732",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-8732",
+          "detail": "Fixed by SGML catalog recursion limit backport in winlibs/libxml2 tag libxml2-2.11.9-5.",
+          "references": [
+            "https://gitlab.gnome.org/GNOME/libxml2/-/commit/eae9291aa73907694dd3a4274d306e31217e746e"
+          ]
+        }
+      ]
+    }
+  ]
+}

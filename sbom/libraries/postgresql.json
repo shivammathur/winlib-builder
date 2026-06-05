@@ -1,0 +1,23 @@
+{
+  "$schema": "../schema.json",
+  "component": "libpq",
+  "aliases": [
+    "libpq"
+  ],
+  "version": {
+    "stripPrefixes": [
+      "libpq-",
+      "postgresql-",
+      "REL_"
+    ]
+  },
+  "upstream": {
+    "repository": "postgres/postgres",
+    "tagTemplate": "REL_{versionUnderscore}"
+  },
+  "license": {
+    "id": "PostgreSQL"
+  },
+  "purl": "pkg:generic/postgresql@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:postgresql:postgresql:{upstreamVersion}:*:*:*:*:*:*:*"
+}

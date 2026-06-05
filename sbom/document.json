@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "namespace": "https://php.net/sbom/winlibs",
+  "author": "PHP",
+  "tool": "winlib-builder-sbom"
+}

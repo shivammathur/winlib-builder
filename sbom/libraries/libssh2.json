@@ -1,0 +1,68 @@
+{
+  "$schema": "../schema.json",
+  "component": "libssh2",
+  "version": {
+    "stripPrefixes": [
+      "libssh2-"
+    ]
+  },
+  "upstream": {
+    "repository": "libssh2/libssh2",
+    "tagTemplate": "libssh2-{version}"
+  },
+  "license": {
+    "id": "BSD-3-Clause"
+  },
+  "purl": "pkg:generic/libssh2@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:libssh2:libssh2:{upstreamVersion}:*:*:*:*:*:*:*",
+  "patchedBuilds": [
+    {
+      "tag": "libssh2-1.11.1-2",
+      "upstream": {
+        "repository": "libssh2/libssh2",
+        "tag": "libssh2-1.11.1",
+        "version": "1.11.1"
+      },
+      "fork": {
+        "repository": "winlibs/libssh2",
+        "tag": "libssh2-1.11.1-2"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2026-7598",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-7598",
+          "detail": "Fixed by backporting upstream username_len bounds checking in src/userauth.c.",
+          "references": [
+            "https://github.com/libssh2/libssh2/pull/1858",
+            "https://github.com/libssh2/libssh2/commit/256d04b60d80bf1190e96b0ad1e91b2174d744b1"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "libssh2-1.11.1-3",
+      "upstream": {
+        "repository": "libssh2/libssh2",
+        "tag": "libssh2-1.11.1",
+        "version": "1.11.1"
+      },
+      "fork": {
+        "repository": "winlibs/libssh2",
+        "tag": "libssh2-1.11.1-3"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2026-7598",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-7598",
+          "detail": "Fixed by backporting upstream username_len bounds checking in src/userauth.c.",
+          "references": [
+            "https://github.com/libssh2/libssh2/pull/1858",
+            "https://github.com/libssh2/libssh2/commit/256d04b60d80bf1190e96b0ad1e91b2174d744b1"
+          ]
+        }
+      ]
+    }
+  ]
+}
