@@ -1,0 +1,35 @@
+[package]
+name = "php-sdk-libbz2-rs-staticlib"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "bz2_rs"
+crate-type = ["staticlib"]
+test = false
+bench = false
+
+[features]
+default = ["stdio"]
+stdio = ["libbz2-rs-sys/stdio"]
+
+[dependencies]
+libbz2-rs-sys = { version = "@LIBBZ2_RS_SYS_VERSION@", default-features = false, features = ["c-allocator", "custom-prefix"] }
+libc = "0.2"
+
+[profile.dev]
+panic = "abort"
+debug = true
+
+[profile.release]
+panic = "abort"
+lto = "thin"
+codegen-units = 1
+
+[profile.relwithdebinfo]
+inherits = "release"
+debug = true
+panic = "abort"
+lto = "thin"
+codegen-units = 1

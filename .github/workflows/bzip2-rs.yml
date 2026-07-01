@@ -1,0 +1,60 @@
+name: Build bzip2-rs
+run-name: "Build ${{ inputs.version }} for PHP ${{ inputs['php-version'] }}"
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: bzip2-rs tag to build
+        required: true
+      php-version:
+        description: PHP version to build for
+        required: true
+defaults:
+  run:
+    shell: pwsh
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+    runs-on: ${{ (inputs['php-version'] == '8.6' || inputs['php-version'] == 'master') && 'windows-2025-vs2026' || 'windows-2022' }}
+    steps:
+      - name: Set git to use LF
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - name: Checkout winlib-builder
+        uses: actions/checkout@v5
+        with:
+          path: winlib-builder
+      - name: Checkout bzip2-rs
+        uses: actions/checkout@v5
+        with:
+          path: bzip2-rs
+          repository: trifectatechfoundation/bzip2-rs
+          ref: ${{ inputs.version }}
+      - name: Compute virtual inputs
+        id: virtuals
+        run: powershell winlib-builder/scripts/compute-virtuals.ps1 -version ${{ inputs['php-version'] }} -arch ${{ matrix.arch }}
+      - name: Setup MSVC development environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+          toolset: ${{ steps.virtuals.outputs.toolset }}
+          sdk: ${{ steps.virtuals.outputs.winsdk }}
+      - name: Set Rust target
+        run: '& winlib-builder/scripts/bzip2-rs/set-rust-target.ps1 -Arch ${{ matrix.arch }}'
+      - name: Setup Rust
+        run: '& winlib-builder/scripts/bzip2-rs/setup-rust.ps1'
+      - name: Prepare staticlib crate
+        run: '& winlib-builder/scripts/bzip2-rs/prepare-staticlib.ps1'
+      - name: Build bzip2-rs
+        run: '& winlib-builder/scripts/bzip2-rs/build.ps1'
+      - name: Install bzip2-rs
+        run: '& winlib-builder/scripts/bzip2-rs/install.ps1'
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libbzip2-1.0.8-1-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
+          path: install
