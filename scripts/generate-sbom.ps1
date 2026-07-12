@@ -1279,6 +1279,11 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
             $newSpdxId = 'SPDXRef-Dependency-' + (ConvertTo-Slug "$(Get-JsonProperty $package 'name')-$(Get-JsonProperty $package 'versionInfo')-$spdxPackageCount")
             $packageCopy = $package | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
             $packageCopy.SPDXID = $newSpdxId
+            if ($null -eq (Get-JsonProperty $packageCopy 'packageVerificationCode')) {
+                $packageCopy | Add-Member -NotePropertyName filesAnalyzed -NotePropertyValue $false -Force
+                $packageCopy.PSObject.Properties.Remove('packageVerificationCode')
+                $packageCopy.PSObject.Properties.Remove('licenseInfoFromFiles')
+            }
             $spdx.packages += $packageCopy
             $spdxPackageIdsByKey[$packageKey] = $newSpdxId
         }
