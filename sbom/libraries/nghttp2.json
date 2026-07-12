@@ -15,5 +15,33 @@
     "id": "MIT"
   },
   "purl": "pkg:generic/nghttp2@{upstreamVersion}",
-  "cpe": "cpe:2.3:a:nghttp2:nghttp2:{upstreamVersion}:*:*:*:*:*:*:*"
+  "cpe": "cpe:2.3:a:nghttp2:nghttp2:{upstreamVersion}:*:*:*:*:*:*:*",
+  "notAffectedCves": [
+    {
+      "id": "CVE-2026-58055",
+      "source": "NVD",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-58055",
+      "detail": "The affected code is the nghttpx proxy front end, which is not built or included in this artifact; only libnghttp2 is shipped. The winlibs source tag nghttp2-1.69.0-1 nevertheless carries the upstream fix.",
+      "justification": "component_not_present",
+      "references": [
+        "https://github.com/winlibs/nghttp2/commit/2a9c99ffa829858a2c0b245eeb4a6e7c9cae7c62",
+        "https://github.com/nghttp2/nghttp2/commit/ab28105c4a0197da24f8bfc414bc116055249e1e",
+        "https://github.com/nghttp2/nghttp2/pull/2769"
+      ]
+    }
+  ],
+  "patchedBuilds": [
+    {
+      "tag": "nghttp2-1.69.0-1",
+      "upstream": {
+        "repository": "nghttp2/nghttp2",
+        "tag": "v1.69.0",
+        "version": "1.69.0"
+      },
+      "fork": {
+        "repository": "winlibs/nghttp2",
+        "tag": "nghttp2-1.69.0-1"
+      }
+    }
+  ]
 }

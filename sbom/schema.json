@@ -10,12 +10,14 @@
     "document": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["namespace", "author", "tool"],
+      "required": ["namespace", "author", "tool", "downloadBaseUrl", "licenseListUrl"],
       "properties": {
         "$schema": { "type": "string" },
         "namespace": { "type": "string", "format": "uri" },
         "author": { "type": "string", "minLength": 1 },
-        "tool": { "type": "string", "minLength": 1 }
+        "tool": { "type": "string", "minLength": 1 },
+        "downloadBaseUrl": { "type": "string", "format": "uri" },
+        "licenseListUrl": { "type": "string", "format": "uri" }
       }
     },
     "library": {
@@ -45,6 +47,10 @@
         "patchedBuilds": {
           "type": "array",
           "items": { "$ref": "#/$defs/patchedBuild" }
+        },
+        "notAffectedCves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/notAffectedCve" }
         }
       }
     },
@@ -191,6 +197,10 @@
         "fixedCves": {
           "type": "array",
           "items": { "$ref": "#/$defs/fixedCve" }
+        },
+        "notAffectedCves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/notAffectedCve" }
         }
       },
       "anyOf": [
@@ -217,6 +227,31 @@
         "source": { "type": "string", "minLength": 1 },
         "url": { "type": "string", "format": "uri" },
         "detail": { "type": "string", "minLength": 1 },
+        "references": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "notAffectedCve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "url", "detail", "justification"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^CVE-[0-9]{4}-[0-9]+$" },
+        "source": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "detail": { "type": "string", "minLength": 1 },
+        "justification": {
+          "enum": [
+            "component_not_present",
+            "vulnerable_code_not_present",
+            "vulnerable_code_not_in_execute_path",
+            "vulnerable_code_cannot_be_controlled_by_adversary",
+            "inline_mitigations_already_exist"
+          ]
+        },
         "references": {
           "type": "array",
           "items": { "type": "string", "format": "uri" },

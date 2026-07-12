@@ -371,6 +371,89 @@ function New-ExternalReference {
     }
 }
 
+function Get-SpdxOriginator {
+    param(
+        [AllowNull()][string]$Repository,
+        [AllowNull()][string]$Url
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Repository) -and $Repository.Contains('/')) {
+        return 'Organization: ' + $Repository.Split('/')[0]
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Url)) {
+        try {
+            return 'Organization: ' + ([uri]$Url).Host
+        } catch {
+        }
+    }
+    return 'NOASSERTION'
+}
+
+function Get-ArtifactInventory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Component,
+        [string[]]$ExcludedFiles = @()
+    )
+
+    $rootPrefix = $Root.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $sbomPrefix = (Join-Path $Root 'share\sbom').TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $spdxFiles = [System.Collections.Generic.List[object]]::new()
+    $cycloneDxFiles = [System.Collections.Generic.List[object]]::new()
+    $sha1Values = [System.Collections.Generic.List[string]]::new()
+    $excludedFileNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($excludedFile in $ExcludedFiles) {
+        $excludedFileNames.Add($excludedFile) | Out-Null
+    }
+    $index = 0
+
+    foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName) {
+        $relative = $file.FullName.Substring($rootPrefix.Length).Replace('\', '/')
+        if ($file.FullName.StartsWith($sbomPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $excludedFileNames.Add("./$relative") | Out-Null
+            continue
+        }
+        $index++
+        $sha1 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA1).Hash.ToLowerInvariant()
+        $sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $sha1Values.Add($sha1) | Out-Null
+        $spdxFileId = 'SPDXRef-File-' + (ConvertTo-Slug "$Component-$relative-$index")
+        $spdxFiles.Add([ordered]@{
+            fileName = "./$relative"
+            SPDXID = $spdxFileId
+            checksums = @(
+                [ordered]@{ algorithm = 'SHA1'; checksumValue = $sha1 }
+                [ordered]@{ algorithm = 'SHA256'; checksumValue = $sha256 }
+            )
+            licenseConcluded = 'NOASSERTION'
+            copyrightText = 'NOASSERTION'
+        }) | Out-Null
+        $cycloneDxFiles.Add([ordered]@{
+            type = 'file'
+            'bom-ref' = "urn:php:winlibs:file:$(ConvertTo-Slug $Component):$(ConvertTo-Slug $relative):$sha256"
+            name = $relative
+            hashes = @([ordered]@{ alg = 'SHA-256'; content = $sha256 })
+        }) | Out-Null
+    }
+
+    $verificationInput = [string]::Join('', @($sha1Values | Sort-Object))
+    $sha1Algorithm = [System.Security.Cryptography.SHA1]::Create()
+    try {
+        $verificationCode = ([System.BitConverter]::ToString(
+            $sha1Algorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($verificationInput))
+        )).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha1Algorithm.Dispose()
+    }
+
+    return [pscustomobject]@{
+        SpdxFiles = @($spdxFiles)
+        CycloneDxFiles = @($cycloneDxFiles)
+        VerificationCode = $verificationCode
+        ExcludedFiles = @($excludedFileNames | Sort-Object)
+    }
+}
+
 function Add-OptionalProperty {
     param(
         [System.Collections.Generic.List[object]]$Properties,
@@ -520,6 +603,7 @@ if ([string]::IsNullOrWhiteSpace($sourceTag)) {
 $forkRepository = $null
 $forkTag = $null
 $fixedCves = @()
+$notAffectedCves = @(ConvertTo-Array (Get-JsonProperty $entry 'notAffectedCves'))
 
 if ($null -ne $patchedBuild) {
     $patchUpstream = Get-JsonProperty $patchedBuild 'upstream'
@@ -545,6 +629,7 @@ if ($null -ne $patchedBuild) {
     }
 
     $fixedCves = @(ConvertTo-Array (Get-JsonProperty $patchedBuild 'fixedCves'))
+    $notAffectedCves += @(ConvertTo-Array (Get-JsonProperty $patchedBuild 'notAffectedCves'))
 }
 
 $values = Get-TemplateValues -Component $componentName -LibraryName $Library -PackageVersion $packageVersion -UpstreamVersion $upstreamVersion -InputTag $Version -SourceTag $sourceTag
@@ -634,7 +719,21 @@ $created = Get-UtcTimestamp
 $documentNamespaceBase = [string]$documentMetadata.namespace
 $toolName = [string]$documentMetadata.tool
 $author = [string]$documentMetadata.author
+$downloadBaseUrl = [string](Get-JsonProperty $documentMetadata 'downloadBaseUrl')
+$licenseListVersion = [string](Invoke-RestMethod -Uri ([string](Get-JsonProperty $documentMetadata 'licenseListUrl')) -TimeoutSec 30).licenseListVersion
+$licenseListVersion = [string]::Join('.', @($licenseListVersion.Split('.')[0..1]))
 $bomRef = Get-BomRef -Component $componentName -PackageVersion $packageVersion
+$artifactNameParts = @($componentName, $packageVersion) + @($Vs, $Arch | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$artifactFileName = [string]::Join('-', $artifactNameParts) + '.zip'
+$artifactPathParts = @($Vs, $Arch | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + @($artifactFileName)
+$artifactDownloadLocation = $downloadBaseUrl.TrimEnd('/') + '/' + [string]::Join('/', $artifactPathParts)
+$originator = Get-SpdxOriginator -Repository $sourceRepository -Url $sourceBaseUrl
+$baseName = $componentName -replace '[^A-Za-z0-9_.-]', '-'
+$excludedSbomFiles = @("./share/sbom/$baseName.cdx.json", "./share/sbom/$baseName.spdx.json")
+if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
+    $excludedSbomFiles += "./share/sbom/$baseName.openvex.json"
+}
+$artifactInventory = Get-ArtifactInventory -Root $installRootPath -Component $componentName -ExcludedFiles $excludedSbomFiles
 
 $properties = [System.Collections.Generic.List[object]]::new()
 Add-OptionalProperty -Properties $properties -Name 'php:library' -Value $Library
@@ -653,8 +752,12 @@ Add-OptionalProperty -Properties $properties -Name 'php:input-version' -Value $V
 Add-OptionalProperty -Properties $properties -Name 'php:vs' -Value $Vs
 Add-OptionalProperty -Properties $properties -Name 'php:arch' -Value $Arch
 Add-OptionalProperty -Properties $properties -Name 'php:php-version' -Value $PhpVersion
+Add-OptionalProperty -Properties $properties -Name 'php:package-file-name' -Value $artifactFileName
+Add-OptionalProperty -Properties $properties -Name 'php:download-location' -Value $artifactDownloadLocation
+Add-OptionalProperty -Properties $properties -Name 'php:package-verification-code' -Value $artifactInventory.VerificationCode
 
 $externalReferences = [System.Collections.Generic.List[object]]::new()
+$externalReferences.Add([ordered]@{ type = 'distribution'; url = $artifactDownloadLocation }) | Out-Null
 $checkoutReferenceType = if ([string]::IsNullOrWhiteSpace($declaredSourceUrl)) { 'vcs' } else { 'distribution' }
 foreach ($reference in @(
         @{ Type = 'website'; Url = $homepage },
@@ -679,6 +782,9 @@ $component = [ordered]@{
 
 if (-not [string]::IsNullOrWhiteSpace($cpe)) {
     $component.cpe = $cpe
+}
+if ($artifactInventory.CycloneDxFiles.Count -gt 0) {
+    $component.components = @($artifactInventory.CycloneDxFiles)
 }
 
 if ($sourceOrigin -ne 'upstream') {
@@ -746,6 +852,13 @@ if ($sourceOrigin -ne 'upstream') {
 }
 
 $vulnerabilities = [System.Collections.Generic.List[object]]::new()
+$cycloneDxJustifications = @{
+    component_not_present = 'code_not_present'
+    vulnerable_code_not_present = 'code_not_present'
+    vulnerable_code_not_in_execute_path = 'code_not_reachable'
+    vulnerable_code_cannot_be_controlled_by_adversary = 'protected_by_mitigating_control'
+    inline_mitigations_already_exist = 'protected_by_mitigating_control'
+}
 foreach ($cve in $fixedCves) {
     $cveId = [string](Get-JsonProperty $cve 'id')
     $detail = [string](Get-JsonProperty $cve 'detail')
@@ -766,6 +879,23 @@ foreach ($cve in $fixedCves) {
             state = 'resolved_with_pedigree'
             response = @('update')
             detail = $detail
+        }
+    }) | Out-Null
+}
+foreach ($cve in $notAffectedCves) {
+    $vulnerabilities.Add([ordered]@{
+        id = [string](Get-JsonProperty $cve 'id')
+        source = [ordered]@{
+            name = [string](Get-JsonProperty $cve 'source')
+            url = [string](Get-JsonProperty $cve 'url')
+        }
+        affects = @(
+            [ordered]@{ ref = $bomRef }
+        )
+        analysis = [ordered]@{
+            state = 'not_affected'
+            justification = $cycloneDxJustifications[[string](Get-JsonProperty $cve 'justification')]
+            detail = [string](Get-JsonProperty $cve 'detail')
         }
     }) | Out-Null
 }
@@ -858,6 +988,8 @@ foreach ($embeddedEntry in ConvertTo-Array (Get-JsonProperty $entry 'components'
         Purl = $embeddedPurl
         Ref = $embeddedRef
         SourcePath = $embeddedPath
+        DownloadLocation = $embeddedTagUrl
+        Originator = Get-SpdxOriginator -Repository $embeddedRepository -Url $embeddedBaseUrl
     }) | Out-Null
 }
 
@@ -1006,6 +1138,9 @@ if (-not [string]::IsNullOrWhiteSpace($checkoutCommit)) { $annotationParts.Add("
 if ($fixedCves.Count -gt 0) {
     $annotationParts.Add("fixed-cves=$([string]::Join(',', @($fixedCves | ForEach-Object { Get-JsonProperty $_ 'id' })))") | Out-Null
 }
+if ($notAffectedCves.Count -gt 0) {
+    $annotationParts.Add("not-affected-cves=$([string]::Join(',', @($notAffectedCves | ForEach-Object { Get-JsonProperty $_ 'id' })))") | Out-Null
+}
 
 $spdx = [ordered]@{
     spdxVersion = 'SPDX-2.3'
@@ -1016,6 +1151,7 @@ $spdx = [ordered]@{
     creationInfo = [ordered]@{
         created = $created
         creators = @("Tool: $toolName-1.0.0", "Organization: $author")
+        licenseListVersion = $licenseListVersion
     }
     documentDescribes = @($spdxId)
     packages = @(
@@ -1023,12 +1159,19 @@ $spdx = [ordered]@{
             name = $componentName
             SPDXID = $spdxId
             versionInfo = $packageVersion
-            downloadLocation = 'NOASSERTION'
-            filesAnalyzed = $false
+            packageFileName = $artifactFileName
+            downloadLocation = $artifactDownloadLocation
+            filesAnalyzed = $true
+            packageVerificationCode = [ordered]@{
+                packageVerificationCodeValue = $artifactInventory.VerificationCode
+                packageVerificationCodeExcludedFiles = @($artifactInventory.ExcludedFiles)
+            }
             licenseConcluded = $spdxLicense
             licenseDeclared = $spdxLicense
             copyrightText = 'NOASSERTION'
             supplier = "Organization: $author"
+            originator = $originator
+            primaryPackagePurpose = 'LIBRARY'
             externalRefs = @($externalRefs | Where-Object { $null -ne $_ })
             annotations = @(
                 [ordered]@{
@@ -1040,6 +1183,7 @@ $spdx = [ordered]@{
             )
         }
     )
+    files = @($artifactInventory.SpdxFiles)
     relationships = @(
         [ordered]@{
             spdxElementId = 'SPDXRef-DOCUMENT'
@@ -1049,11 +1193,20 @@ $spdx = [ordered]@{
     )
 }
 
+foreach ($file in $artifactInventory.SpdxFiles) {
+    $spdx.relationships += [ordered]@{
+        spdxElementId = $spdxId
+        relationshipType = 'CONTAINS'
+        relatedSpdxElement = $file.SPDXID
+    }
+}
+
 $spdxPackageIdsByKey = @{}
 $spdxPackageIdsByKey["$componentName|$packageVersion|$purl|$spdxLicense"] = $spdxId
 $spdxRelationshipKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $spdxRelationshipKeys.Add("SPDXRef-DOCUMENT|DESCRIBES|$spdxId") | Out-Null
 $spdxPackageCount = 0
+$spdxFileCount = $artifactInventory.SpdxFiles.Count
 foreach ($record in $embeddedRecords) {
     $spdxPackageCount++
     $embeddedLicenseMetadata = Get-JsonProperty $record.Entry 'license'
@@ -1063,12 +1216,14 @@ foreach ($record in $embeddedRecords) {
         name = $record.Name
         SPDXID = $embeddedSpdxId
         versionInfo = $record.Version
-        downloadLocation = 'NOASSERTION'
+        downloadLocation = $record.DownloadLocation
         filesAnalyzed = $false
         licenseConcluded = $embeddedLicense
         licenseDeclared = $embeddedLicense
         copyrightText = 'NOASSERTION'
         supplier = "Organization: $author"
+        originator = $record.Originator
+        primaryPackagePurpose = 'LIBRARY'
         sourceInfo = "Embedded from $($record.SourcePath)."
         externalRefs = @((New-ExternalReference -Category 'PACKAGE-MANAGER' -Type 'purl' -Locator $record.Purl))
     }
@@ -1105,6 +1260,15 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
         }
         $spdxIdMap[[string](Get-JsonProperty $package 'SPDXID')] = $newSpdxId
     }
+    foreach ($dependencyFile in ConvertTo-Array (Get-JsonProperty $dependencySbom 'files')) {
+        $spdxFileCount++
+        $dependencyFileCopy = $dependencyFile | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
+        $oldFileId = [string](Get-JsonProperty $dependencyFile 'SPDXID')
+        $newFileId = 'SPDXRef-File-' + (ConvertTo-Slug "$componentName-$(Get-JsonProperty $dependencyFile 'fileName')-$spdxFileCount")
+        $dependencyFileCopy.SPDXID = $newFileId
+        $spdx.files += $dependencyFileCopy
+        $spdxIdMap[$oldFileId] = $newFileId
+    }
     foreach ($license in ConvertTo-Array (Get-JsonProperty $dependencySbom 'hasExtractedLicensingInfos')) {
         $licenseId = [string](Get-JsonProperty $license 'licenseId')
         $existingLicense = $extractedLicenses | Where-Object { $_.licenseId -eq $licenseId } | Select-Object -First 1
@@ -1136,7 +1300,7 @@ if ($extractedLicenses.Count -gt 0) {
     $spdx.hasExtractedLicensingInfos = @($extractedLicenses)
 }
 
-if ($fixedCves.Count -gt 0) {
+if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
     $openVexStatements = [System.Collections.Generic.List[object]]::new()
     foreach ($cve in $fixedCves) {
         $cveId = [string](Get-JsonProperty $cve 'id')
@@ -1149,10 +1313,28 @@ if ($fixedCves.Count -gt 0) {
             vulnerability = [ordered]@{ name = $cveId }
             timestamp = $created
             products = @(
-                [ordered]@{ '@id' = $bomRef }
+                [ordered]@{
+                    '@id' = $bomRef
+                    identifiers = [ordered]@{ purl = $purl }
+                }
             )
             status = 'fixed'
             action_statement = $detail
+        }) | Out-Null
+    }
+    foreach ($cve in $notAffectedCves) {
+        $openVexStatements.Add([ordered]@{
+            vulnerability = [ordered]@{ name = [string](Get-JsonProperty $cve 'id') }
+            timestamp = $created
+            products = @(
+                [ordered]@{
+                    '@id' = $bomRef
+                    identifiers = [ordered]@{ purl = $purl }
+                }
+            )
+            status = 'not_affected'
+            justification = [string](Get-JsonProperty $cve 'justification')
+            impact_statement = [string](Get-JsonProperty $cve 'detail')
         }) | Out-Null
     }
 
@@ -1166,13 +1348,12 @@ if ($fixedCves.Count -gt 0) {
     }
 }
 
-$baseName = $componentName -replace '[^A-Za-z0-9_.-]', '-'
 $cycloneDxPath = Join-Path $sbomRoot "$baseName.cdx.json"
 $spdxPath = Join-Path $sbomRoot "$baseName.spdx.json"
 ConvertTo-JsonFile -Object $cycloneDx -Path $cycloneDxPath
 ConvertTo-JsonFile -Object $spdx -Path $spdxPath
 
-if ($fixedCves.Count -gt 0) {
+if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
     $openVexPath = Join-Path $sbomRoot "$baseName.openvex.json"
     ConvertTo-JsonFile -Object $openVex -Path $openVexPath
 }
@@ -1180,6 +1361,6 @@ if ($fixedCves.Count -gt 0) {
 Write-Host "Generated SBOMs for $componentName $packageVersion"
 Write-Host "CycloneDX: $cycloneDxPath"
 Write-Host "SPDX: $spdxPath"
-if ($fixedCves.Count -gt 0) {
+if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
     Write-Host "OpenVEX: $openVexPath"
 }

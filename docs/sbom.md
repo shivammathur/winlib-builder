@@ -5,12 +5,18 @@ per-library compliance data into each dependency artifact:
 
 - `share/sbom/<library>.cdx.json`
 - `share/sbom/<library>.spdx.json`
-- `share/sbom/<library>.openvex.json`, only when a patched build lists fixed CVEs
+- `share/sbom/<library>.openvex.json`, when fixed or not-affected CVEs are listed
 - `share/licenses/<library>/...`
 
 Shared document metadata lives in `sbom/document.json`. Each library has its
 own file under `sbom/libraries/`; all files are validated against
 `sbom/schema.json` before an SBOM is generated.
+
+The generated SPDX fragment records the public dependency ZIP name and URL,
+the current SPDX license-list version resolved from the official SPDX list,
+and SHA-256 checksums for every file in the artifact. Its package verification
+code excludes `share/sbom`, and records those paths as excluded files, allowing
+the SBOM to remain embedded without hashing itself.
 
 For a normal build, the generator uses the canonical upstream repository and
 tag template. For example, brotli `v1.2.0` is identified as brotli `1.2.0`
@@ -66,5 +72,14 @@ asserted for that exact Winlibs artifact.
 ```
 
 This produces CycloneDX pedigree and `resolved_with_pedigree` analysis plus an
-OpenVEX `fixed` statement scoped to the exact Winlibs artifact identity. It does
-not claim that the generic upstream package is fixed.
+OpenVEX `fixed` statement scoped to the exact Winlibs artifact identity. The
+product also carries its canonical purl as an alternate identifier so scanners
+can match it to the SBOM component; it does not claim that unrelated builds of
+the generic upstream package are fixed.
+
+Use library-level `notAffectedCves` for scanner findings that cannot apply to
+any version of the Winlibs artifact, such as a separate module or
+platform-specific packaging that is not included. The generator emits
+CycloneDX `not_affected` analysis and an OpenVEX `not_affected` statement with
+the supplied justification. A `notAffectedCves` array may instead be placed on
+a `patchedBuilds` entry when the assertion only applies to that build.
