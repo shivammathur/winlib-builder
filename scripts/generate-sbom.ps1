@@ -165,6 +165,7 @@ function Get-GitInfo {
 
         $commit = & git -C $path rev-parse HEAD 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) {
+            $global:LASTEXITCODE = 0
             continue
         }
 
@@ -172,6 +173,7 @@ function Get-GitInfo {
         $tag = & git -C $path describe --tags --exact-match HEAD 2>$null
         if ($LASTEXITCODE -ne 0) {
             $tag = $null
+            $global:LASTEXITCODE = 0
         }
 
         $repository = $null
@@ -1067,11 +1069,11 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
             }
         }
         $packageName = [string](Get-JsonProperty $package 'name')
-        $packageVersion = [string](Get-JsonProperty $package 'versionInfo')
-        $ref = if ([string]::IsNullOrWhiteSpace($packagePurl)) { "pkg:generic/$(ConvertTo-Slug $packageName)@$packageVersion" } else { $packagePurl }
+        $dependencyPackageVersion = [string](Get-JsonProperty $package 'versionInfo')
+        $ref = if ([string]::IsNullOrWhiteSpace($packagePurl)) { "pkg:generic/$(ConvertTo-Slug $packageName)@$dependencyPackageVersion" } else { $packagePurl }
         $spdxRefs[[string](Get-JsonProperty $package 'SPDXID')] = $ref
         if (-not $componentMap.ContainsKey($ref)) {
-            $converted = [ordered]@{ type = 'library'; 'bom-ref' = $ref; name = $packageName; version = $packageVersion }
+            $converted = [ordered]@{ type = 'library'; 'bom-ref' = $ref; name = $packageName; version = $dependencyPackageVersion }
             if (-not [string]::IsNullOrWhiteSpace($packagePurl)) { $converted.purl = $packagePurl }
             $declaredLicense = [string](Get-JsonProperty $package 'licenseDeclared')
             if (-not [string]::IsNullOrWhiteSpace($declaredLicense) -and $declaredLicense -ne 'NOASSERTION') {
@@ -1283,6 +1285,12 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
         $spdxIdMap[[string](Get-JsonProperty $package 'SPDXID')] = $newSpdxId
     }
     foreach ($dependencyFile in ConvertTo-Array (Get-JsonProperty $dependencySbom 'files')) {
+        $sha1Checksum = ConvertTo-Array (Get-JsonProperty $dependencyFile 'checksums') |
+            Where-Object { (Get-JsonProperty $_ 'algorithm') -eq 'SHA1' } |
+            Select-Object -First 1
+        if ($null -eq $sha1Checksum) {
+            continue
+        }
         $spdxFileCount++
         $dependencyFileCopy = $dependencyFile | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
         $oldFileId = [string](Get-JsonProperty $dependencyFile 'SPDXID')
