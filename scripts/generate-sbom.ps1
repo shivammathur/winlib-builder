@@ -226,7 +226,8 @@ function Get-PatchedBuild {
         [string]$PackageVersion
     )
 
-    foreach ($patchedBuild in ConvertTo-Array (Get-JsonProperty $Entry 'patchedBuilds')) {
+    $patchedBuilds = ConvertTo-Array (Get-JsonProperty $Entry 'patchedBuilds')
+    foreach ($patchedBuild in $patchedBuilds) {
         $tags = ConvertTo-Array (Get-JsonProperty $patchedBuild 'tags')
         $tag = Get-JsonProperty $patchedBuild 'tag'
         if ($null -ne $tag) {
@@ -245,7 +246,28 @@ function Get-PatchedBuild {
         }
     }
 
-    return $null
+    $versionMatch = $null
+    $versionMetadata = Get-JsonProperty $Entry 'version'
+    foreach ($patchedBuild in $patchedBuilds) {
+        $tags = ConvertTo-Array (Get-JsonProperty $patchedBuild 'tags')
+        $tag = Get-JsonProperty $patchedBuild 'tag'
+        if ($null -ne $tag) {
+            $tags += $tag
+        }
+
+        foreach ($candidate in $tags) {
+            $candidateVersion = Normalize-Version -InputVersion ([string]$candidate) -VersionMetadata $versionMetadata
+            if ([string]::Equals($candidateVersion, $PackageVersion, [System.StringComparison]::OrdinalIgnoreCase)) {
+                if ($null -ne $versionMatch) {
+                    throw "Multiple patched builds match package version '$PackageVersion'."
+                }
+                $versionMatch = $patchedBuild
+                break
+            }
+        }
+    }
+
+    return $versionMatch
 }
 
 function Get-SpdxLicenseExpression {
@@ -1350,12 +1372,14 @@ if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
 
 $cycloneDxPath = Join-Path $sbomRoot "$baseName.cdx.json"
 $spdxPath = Join-Path $sbomRoot "$baseName.spdx.json"
+$openVexPath = Join-Path $sbomRoot "$baseName.openvex.json"
 ConvertTo-JsonFile -Object $cycloneDx -Path $cycloneDxPath
 ConvertTo-JsonFile -Object $spdx -Path $spdxPath
 
 if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
-    $openVexPath = Join-Path $sbomRoot "$baseName.openvex.json"
     ConvertTo-JsonFile -Object $openVex -Path $openVexPath
+} elseif (Test-Path -LiteralPath $openVexPath -PathType Leaf) {
+    Remove-Item -LiteralPath $openVexPath -Force
 }
 
 Write-Host "Generated SBOMs for $componentName $packageVersion"
