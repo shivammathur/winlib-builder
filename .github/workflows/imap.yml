@@ -58,8 +58,14 @@ jobs:
           -Vs '${{ steps.virtuals.outputs.vs }}'
           -Arch '${{ matrix.arch }}'
           -PhpVersion '${{ github.event.inputs.php }}'
+      - name: Set package name
+        id: package
+        shell: pwsh
+        run: |
+          $version = '${{ github.event.inputs.version }}' -replace '^imap-', ''
+          "name=c-client-$version" >> $env:GITHUB_OUTPUT
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{github.event.inputs.version}}-${{steps.virtuals.outputs.vs}}-${{matrix.arch}}
+          name: ${{steps.package.outputs.name}}-${{steps.virtuals.outputs.vs}}-${{matrix.arch}}
           path: install
