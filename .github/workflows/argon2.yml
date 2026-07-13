@@ -40,7 +40,9 @@ jobs:
       - name: Build argon2
         run: |
           cd argon2
+          if "${{ matrix.arch }}"=="x86" set "_CL_=/O2"
           nmake /f Makefile.vc
+          set "_CL_="
           nmake /f Makefile.vc DEBUG=1
       - name: Install argon2
         run: |
