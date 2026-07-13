@@ -1,6 +1,7 @@
 {
   "$schema": "../schema.json",
   "component": "sqlite3",
+  "copyrightText": "NONE",
   "aliases": [
     "sqlite"
   ],

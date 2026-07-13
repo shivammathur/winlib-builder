@@ -27,6 +27,7 @@
       "properties": {
         "$schema": { "type": "string" },
         "component": { "type": "string", "minLength": 1 },
+        "copyrightText": { "type": "string", "minLength": 1 },
         "aliases": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
@@ -43,6 +44,10 @@
         "components": {
           "type": "array",
           "items": { "$ref": "#/$defs/embeddedComponent" }
+        },
+        "spdxPackageOverrides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/spdxPackageOverride" }
         },
         "patchedBuilds": {
           "type": "array",
@@ -67,6 +72,15 @@
         "homepage": { "type": "string", "format": "uri" },
         "purl": { "type": "string", "minLength": 1 },
         "cpe": { "type": "string", "minLength": 1 }
+      }
+    },
+    "spdxPackageOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "versionInfo": { "type": "string", "minLength": 1 },
+        "supplier": { "type": "string", "pattern": "^(Organization|Person): .+" },
+        "licenseConcluded": { "type": "string", "minLength": 1 }
       }
     },
     "version": {

@@ -11,12 +11,14 @@ per-library compliance data into each dependency artifact:
 Shared document metadata lives in `sbom/document.json`. Each library has its
 own file under `sbom/libraries/`; all files are validated against
 `sbom/schema.json` before an SBOM is generated.
+Generated components refer consumers to the accompanying license and notice
+files for copyright information. Set `copyrightText` only to override that
+default, such as `NONE` for a public-domain work.
 
-The generated SPDX fragment records the public dependency ZIP name and URL,
-the current SPDX license-list version resolved from the official SPDX list,
-and SHA-256 checksums for every file in the artifact. Its package verification
-code excludes `share/sbom`, and records those paths as excluded files, allowing
-the SBOM to remain embedded without hashing itself.
+The generated SPDX fragment records the public dependency ZIP name and URL and
+the current SPDX license-list version resolved from the official SPDX list.
+Binary artifacts are represented at package level; final ZIP checksums belong
+in external sidecars created after packaging.
 
 For a normal build, the generator uses the canonical upstream repository and
 tag template. For example, brotli `v1.2.0` is identified as brotli `1.2.0`

@@ -406,76 +406,97 @@ function Get-SpdxOriginator {
     }
     if (-not [string]::IsNullOrWhiteSpace($Url)) {
         try {
-            return 'Organization: ' + ([uri]$Url).Host
+            $uri = [uri]($Url -replace '^git\+', '')
+            if ($uri.Host -eq 'github.com' -and $uri.Segments.Count -gt 1) {
+                return 'Organization: ' + $uri.Segments[1].Trim('/')
+            }
+            if ($uri.Host -match '(^|\.)apache\.org$') {
+                return 'Organization: Apache Software Foundation'
+            }
+            if ($uri.Host -match '(^|\.)lua\.org$') {
+                return 'Organization: Lua.org'
+            }
+            return 'Organization: ' + $uri.Host
         } catch {
         }
     }
     return 'NOASSERTION'
 }
 
-function Get-ArtifactInventory {
+function Complete-VcpkgSpdxPackages {
     param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$Component,
-        [string[]]$ExcludedFiles = @()
+        $Sbom,
+        [string]$BinarySupplier,
+        [AllowNull()]$Overrides
     )
 
-    $rootPrefix = $Root.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
-    $sbomPrefix = (Join-Path $Root 'share\sbom').TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
-    $spdxFiles = [System.Collections.Generic.List[object]]::new()
-    $cycloneDxFiles = [System.Collections.Generic.List[object]]::new()
-    $sha1Values = [System.Collections.Generic.List[string]]::new()
-    $excludedFileNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($excludedFile in $ExcludedFiles) {
-        $excludedFileNames.Add($excludedFile) | Out-Null
+    $packages = @(ConvertTo-Array (Get-JsonProperty $Sbom 'packages'))
+    $portPackage = $packages | Where-Object {
+        (Get-JsonProperty $_ 'comment') -eq 'This is the port (recipe) consumed by vcpkg.' -or
+        (Get-JsonProperty $_ 'SPDXID') -eq 'SPDXRef-port'
+    } | Select-Object -First 1
+    if ($null -eq $portPackage) {
+        return $Sbom
     }
-    $index = 0
 
-    foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName) {
-        $relative = $file.FullName.Substring($rootPrefix.Length).Replace('\', '/')
-        if ($file.FullName.StartsWith($sbomPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $excludedFileNames.Add("./$relative") | Out-Null
-            continue
+    $portVersion = ([string](Get-JsonProperty $portPackage 'versionInfo')) -replace '#\d+$', ''
+    $portLicense = [string](Get-JsonProperty $portPackage 'licenseConcluded')
+
+    foreach ($package in $packages) {
+        $name = [string](Get-JsonProperty $package 'name')
+        $override = Get-JsonProperty $Overrides $name
+        $comment = [string](Get-JsonProperty $package 'comment')
+
+        $version = [string](Get-JsonProperty $package 'versionInfo')
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $downloadLocation = [string](Get-JsonProperty $package 'downloadLocation')
+            if ($downloadLocation -match '@([^@]+)$' -and $matches[1] -notmatch '\$\{') {
+                $version = $matches[1] -replace '^refs/tags/', ''
+                if ($version -notmatch '^[0-9a-f]{40}$') {
+                    $version = $version -replace '^v(?=\d)', '' -replace '^(?:openssl|pcre2)-(?=\d)', ''
+                }
+            } else {
+                $version = $portVersion
+            }
+            $overrideVersion = Get-JsonProperty $override 'versionInfo'
+            if ($null -ne $overrideVersion) {
+                $version = [string]$overrideVersion
+            }
+            $package | Add-Member -NotePropertyName versionInfo -NotePropertyValue $version -Force
         }
-        $index++
-        $sha1 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA1).Hash.ToLowerInvariant()
-        $sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        $sha1Values.Add($sha1) | Out-Null
-        $spdxFileId = 'SPDXRef-File-' + (ConvertTo-Slug "$Component-$relative-$index")
-        $spdxFiles.Add([ordered]@{
-            fileName = "./$relative"
-            SPDXID = $spdxFileId
-            checksums = @(
-                [ordered]@{ algorithm = 'SHA1'; checksumValue = $sha1 }
-                [ordered]@{ algorithm = 'SHA256'; checksumValue = $sha256 }
-            )
-            licenseConcluded = 'NOASSERTION'
-            copyrightText = 'NOASSERTION'
-        }) | Out-Null
-        $cycloneDxFiles.Add([ordered]@{
-            type = 'file'
-            'bom-ref' = "urn:php:winlibs:file:$(ConvertTo-Slug $Component):$(ConvertTo-Slug $relative):$sha256"
-            name = $relative
-            hashes = @([ordered]@{ alg = 'SHA-256'; content = $sha256 })
-        }) | Out-Null
+
+        $supplier = [string](Get-JsonProperty $package 'supplier')
+        if ([string]::IsNullOrWhiteSpace($supplier) -or $supplier -eq 'NOASSERTION') {
+            $overrideSupplier = Get-JsonProperty $override 'supplier'
+            if ($null -ne $overrideSupplier) {
+                $supplier = [string]$overrideSupplier
+            } elseif ($package -eq $portPackage) {
+                $supplier = 'Organization: Microsoft'
+            } elseif ($comment -eq 'This is a binary package built by vcpkg.' -or $name -match ':[^:]+$') {
+                $supplier = "Organization: $BinarySupplier"
+            } else {
+                $supplier = Get-SpdxOriginator -Url ([string](Get-JsonProperty $package 'downloadLocation'))
+                if ($supplier -eq 'NOASSERTION') {
+                    $supplier = 'Organization: Microsoft'
+                }
+            }
+            $package | Add-Member -NotePropertyName supplier -NotePropertyValue $supplier -Force
+        }
+
+        $license = [string](Get-JsonProperty $package 'licenseConcluded')
+        if ([string]::IsNullOrWhiteSpace($license) -or $license -eq 'NOASSERTION') {
+            $overrideLicense = Get-JsonProperty $override 'licenseConcluded'
+            $license = if ($null -eq $overrideLicense) { $portLicense } else { [string]$overrideLicense }
+            $package | Add-Member -NotePropertyName licenseConcluded -NotePropertyValue $license -Force
+        }
+
+        $packageCopyright = [string](Get-JsonProperty $package 'copyrightText')
+        if ([string]::IsNullOrWhiteSpace($packageCopyright) -or $packageCopyright -eq 'NOASSERTION') {
+            $package | Add-Member -NotePropertyName copyrightText -NotePropertyValue 'See accompanying license and notice files.' -Force
+        }
     }
 
-    $verificationInput = [string]::Join('', @($sha1Values | Sort-Object))
-    $sha1Algorithm = [System.Security.Cryptography.SHA1]::Create()
-    try {
-        $verificationCode = ([System.BitConverter]::ToString(
-            $sha1Algorithm.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($verificationInput))
-        )).Replace('-', '').ToLowerInvariant()
-    } finally {
-        $sha1Algorithm.Dispose()
-    }
-
-    return [pscustomobject]@{
-        SpdxFiles = @($spdxFiles)
-        CycloneDxFiles = @($cycloneDxFiles)
-        VerificationCode = $verificationCode
-        ExcludedFiles = @($excludedFileNames | Sort-Object)
-    }
+    return $Sbom
 }
 
 function Add-OptionalProperty {
@@ -739,6 +760,11 @@ if (-not [string]::IsNullOrWhiteSpace([string]$inlineLicenseText)) {
     Set-Content -LiteralPath (Join-Path $licenseRoot 'LICENSE') -Value ([string]$inlineLicenseText).Trim() -Encoding utf8
 }
 
+$componentCopyright = [string](Get-JsonProperty $entry 'copyrightText')
+if ([string]::IsNullOrWhiteSpace($componentCopyright)) {
+    $componentCopyright = 'See accompanying license and notice files.'
+}
+
 $created = Get-UtcTimestamp
 $documentNamespaceBase = [string]$documentMetadata.namespace
 $toolName = [string]$documentMetadata.tool
@@ -753,12 +779,6 @@ $artifactPathParts = @($Vs, $Arch | Where-Object { -not [string]::IsNullOrWhiteS
 $artifactDownloadLocation = $downloadBaseUrl.TrimEnd('/') + '/' + [string]::Join('/', $artifactPathParts)
 $originator = Get-SpdxOriginator -Repository $sourceRepository -Url $sourceBaseUrl
 $baseName = $componentName -replace '[^A-Za-z0-9_.-]', '-'
-$excludedSbomFiles = @("./share/sbom/$baseName.cdx.json", "./share/sbom/$baseName.spdx.json")
-if ($fixedCves.Count -gt 0 -or $notAffectedCves.Count -gt 0) {
-    $excludedSbomFiles += "./share/sbom/$baseName.openvex.json"
-}
-$artifactInventory = Get-ArtifactInventory -Root $installRootPath -Component $componentName -ExcludedFiles $excludedSbomFiles
-
 $properties = [System.Collections.Generic.List[object]]::new()
 Add-OptionalProperty -Properties $properties -Name 'php:library' -Value $Library
 Add-OptionalProperty -Properties $properties -Name 'php:component' -Value $componentName
@@ -778,7 +798,6 @@ Add-OptionalProperty -Properties $properties -Name 'php:arch' -Value $Arch
 Add-OptionalProperty -Properties $properties -Name 'php:php-version' -Value $PhpVersion
 Add-OptionalProperty -Properties $properties -Name 'php:package-file-name' -Value $artifactFileName
 Add-OptionalProperty -Properties $properties -Name 'php:download-location' -Value $artifactDownloadLocation
-Add-OptionalProperty -Properties $properties -Name 'php:package-verification-code' -Value $artifactInventory.VerificationCode
 
 $externalReferences = [System.Collections.Generic.List[object]]::new()
 $externalReferences.Add([ordered]@{ type = 'distribution'; url = $artifactDownloadLocation }) | Out-Null
@@ -800,15 +819,14 @@ $component = [ordered]@{
     version = $packageVersion
     purl = $purl
     licenses = @(New-CycloneDxLicenseChoice -License $licenseMetadata)
+    copyright = $componentCopyright
+    supplier = [ordered]@{ name = $author }
     externalReferences = @($externalReferences)
     properties = @($properties)
 }
 
 if (-not [string]::IsNullOrWhiteSpace($cpe)) {
     $component.cpe = $cpe
-}
-if ($artifactInventory.CycloneDxFiles.Count -gt 0) {
-    $component.components = @($artifactInventory.CycloneDxFiles)
 }
 
 if ($sourceOrigin -ne 'upstream') {
@@ -987,6 +1005,8 @@ foreach ($embeddedEntry in ConvertTo-Array (Get-JsonProperty $entry 'components'
         $embeddedReferences.Add([ordered]@{ type = 'vcs'; url = "git+$($embeddedGit.Url).git@$($embeddedGit.Commit)" }) | Out-Null
     }
 
+    $embeddedCopyright = 'See accompanying license and notice files.'
+
     $embeddedComponent = [ordered]@{
         type = 'library'
         'bom-ref' = $embeddedRef
@@ -994,6 +1014,7 @@ foreach ($embeddedEntry in ConvertTo-Array (Get-JsonProperty $entry 'components'
         version = $embeddedPackageVersion
         purl = $embeddedPurl
         licenses = @(New-CycloneDxLicenseChoice -License (Get-JsonProperty $embeddedEntry 'license'))
+        copyright = $embeddedCopyright
         externalReferences = @($embeddedReferences)
         properties = @($embeddedProperties)
     }
@@ -1014,6 +1035,7 @@ foreach ($embeddedEntry in ConvertTo-Array (Get-JsonProperty $entry 'components'
         SourcePath = $embeddedPath
         DownloadLocation = $embeddedTagUrl
         Originator = Get-SpdxOriginator -Repository $embeddedRepository -Url $embeddedBaseUrl
+        Copyright = $embeddedCopyright
     }) | Out-Null
 }
 
@@ -1043,7 +1065,15 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.cdx\.json$'
     foreach ($dependencyComponent in @($dependencyRootComponent) + (ConvertTo-Array (Get-JsonProperty $dependencySbom 'components'))) {
         $ref = [string](Get-JsonProperty $dependencyComponent 'bom-ref')
         if (-not [string]::IsNullOrWhiteSpace($ref) -and -not $componentMap.ContainsKey($ref)) {
-            $componentMap[$ref] = $dependencyComponent
+            $componentCopy = $dependencyComponent | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
+            $nestedComponents = @(ConvertTo-Array (Get-JsonProperty $componentCopy 'components') |
+                Where-Object { (Get-JsonProperty $_ 'type') -ne 'file' })
+            if ($nestedComponents.Count -eq 0) {
+                $componentCopy.PSObject.Properties.Remove('components')
+            } else {
+                $componentCopy.components = $nestedComponents
+            }
+            $componentMap[$ref] = $componentCopy
         }
     }
     foreach ($dependency in ConvertTo-Array (Get-JsonProperty $dependencySbom 'dependencies')) {
@@ -1058,7 +1088,10 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
     if (Test-Path -LiteralPath ($file -replace '\.spdx\.json$', '.cdx.json')) {
         continue
     }
-    $dependencySbom = Read-JsonFile -Path $file
+    $dependencySbom = Complete-VcpkgSpdxPackages `
+        -Sbom (Read-JsonFile -Path $file) `
+        -BinarySupplier $author `
+        -Overrides (Get-JsonProperty $entry 'spdxPackageOverrides')
     $spdxRefs = @{}
     foreach ($package in ConvertTo-Array (Get-JsonProperty $dependencySbom 'packages')) {
         $packagePurl = $null
@@ -1075,9 +1108,20 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
         if (-not $componentMap.ContainsKey($ref)) {
             $converted = [ordered]@{ type = 'library'; 'bom-ref' = $ref; name = $packageName; version = $dependencyPackageVersion }
             if (-not [string]::IsNullOrWhiteSpace($packagePurl)) { $converted.purl = $packagePurl }
-            $declaredLicense = [string](Get-JsonProperty $package 'licenseDeclared')
-            if (-not [string]::IsNullOrWhiteSpace($declaredLicense) -and $declaredLicense -ne 'NOASSERTION') {
-                $converted.licenses = @([ordered]@{ expression = $declaredLicense })
+            $packageLicense = [string](Get-JsonProperty $package 'licenseDeclared')
+            if ([string]::IsNullOrWhiteSpace($packageLicense) -or $packageLicense -eq 'NOASSERTION') {
+                $packageLicense = [string](Get-JsonProperty $package 'licenseConcluded')
+            }
+            if (-not [string]::IsNullOrWhiteSpace($packageLicense) -and $packageLicense -ne 'NOASSERTION') {
+                $converted.licenses = @([ordered]@{ expression = $packageLicense })
+            }
+            $packageCopyright = [string](Get-JsonProperty $package 'copyrightText')
+            if (-not [string]::IsNullOrWhiteSpace($packageCopyright) -and $packageCopyright -ne 'NOASSERTION') {
+                $converted.copyright = $packageCopyright
+            }
+            $packageSupplier = [string](Get-JsonProperty $package 'supplier')
+            if (-not [string]::IsNullOrWhiteSpace($packageSupplier) -and $packageSupplier -ne 'NOASSERTION') {
+                $converted.supplier = [ordered]@{ name = ($packageSupplier -replace '^(?:Organization|Person):\s*', '') }
             }
             $componentMap[$ref] = $converted
         }
@@ -1185,14 +1229,10 @@ $spdx = [ordered]@{
             versionInfo = $packageVersion
             packageFileName = $artifactFileName
             downloadLocation = $artifactDownloadLocation
-            filesAnalyzed = $true
-            packageVerificationCode = [ordered]@{
-                packageVerificationCodeValue = $artifactInventory.VerificationCode
-                packageVerificationCodeExcludedFiles = @($artifactInventory.ExcludedFiles)
-            }
+            filesAnalyzed = $false
             licenseConcluded = $spdxLicense
             licenseDeclared = $spdxLicense
-            copyrightText = 'NOASSERTION'
+            copyrightText = $componentCopyright
             supplier = "Organization: $author"
             originator = $originator
             primaryPackagePurpose = 'LIBRARY'
@@ -1207,7 +1247,6 @@ $spdx = [ordered]@{
             )
         }
     )
-    files = @($artifactInventory.SpdxFiles)
     relationships = @(
         [ordered]@{
             spdxElementId = 'SPDXRef-DOCUMENT'
@@ -1217,20 +1256,11 @@ $spdx = [ordered]@{
     )
 }
 
-foreach ($file in $artifactInventory.SpdxFiles) {
-    $spdx.relationships += [ordered]@{
-        spdxElementId = $spdxId
-        relationshipType = 'CONTAINS'
-        relatedSpdxElement = $file.SPDXID
-    }
-}
-
 $spdxPackageIdsByKey = @{}
 $spdxPackageIdsByKey["$componentName|$packageVersion|$purl|$spdxLicense"] = $spdxId
 $spdxRelationshipKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $spdxRelationshipKeys.Add("SPDXRef-DOCUMENT|DESCRIBES|$spdxId") | Out-Null
 $spdxPackageCount = 0
-$spdxFileCount = $artifactInventory.SpdxFiles.Count
 foreach ($record in $embeddedRecords) {
     $spdxPackageCount++
     $embeddedLicenseMetadata = Get-JsonProperty $record.Entry 'license'
@@ -1244,7 +1274,7 @@ foreach ($record in $embeddedRecords) {
         filesAnalyzed = $false
         licenseConcluded = $embeddedLicense
         licenseDeclared = $embeddedLicense
-        copyrightText = 'NOASSERTION'
+        copyrightText = $record.Copyright
         supplier = "Organization: $author"
         originator = $record.Originator
         primaryPackagePurpose = 'LIBRARY'
@@ -1261,7 +1291,10 @@ foreach ($record in $embeddedRecords) {
 }
 
 foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$' } | Sort-Object) {
-    $dependencySbom = Read-JsonFile -Path $file
+    $dependencySbom = Complete-VcpkgSpdxPackages `
+        -Sbom (Read-JsonFile -Path $file) `
+        -BinarySupplier $author `
+        -Overrides (Get-JsonProperty $entry 'spdxPackageOverrides')
     $spdxIdMap = @{}
     foreach ($package in ConvertTo-Array (Get-JsonProperty $dependencySbom 'packages')) {
         $packagePurl = $null
@@ -1279,30 +1312,13 @@ foreach ($file in $dependencySbomFiles | Where-Object { $_ -match '\.spdx\.json$
             $newSpdxId = 'SPDXRef-Dependency-' + (ConvertTo-Slug "$(Get-JsonProperty $package 'name')-$(Get-JsonProperty $package 'versionInfo')-$spdxPackageCount")
             $packageCopy = $package | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
             $packageCopy.SPDXID = $newSpdxId
-            if ($null -eq (Get-JsonProperty $packageCopy 'packageVerificationCode')) {
-                $packageCopy | Add-Member -NotePropertyName filesAnalyzed -NotePropertyValue $false -Force
-                $packageCopy.PSObject.Properties.Remove('packageVerificationCode')
-                $packageCopy.PSObject.Properties.Remove('licenseInfoFromFiles')
-            }
+            $packageCopy | Add-Member -NotePropertyName filesAnalyzed -NotePropertyValue $false -Force
+            $packageCopy.PSObject.Properties.Remove('packageVerificationCode')
+            $packageCopy.PSObject.Properties.Remove('licenseInfoFromFiles')
             $spdx.packages += $packageCopy
             $spdxPackageIdsByKey[$packageKey] = $newSpdxId
         }
         $spdxIdMap[[string](Get-JsonProperty $package 'SPDXID')] = $newSpdxId
-    }
-    foreach ($dependencyFile in ConvertTo-Array (Get-JsonProperty $dependencySbom 'files')) {
-        $sha1Checksum = ConvertTo-Array (Get-JsonProperty $dependencyFile 'checksums') |
-            Where-Object { (Get-JsonProperty $_ 'algorithm') -eq 'SHA1' } |
-            Select-Object -First 1
-        if ($null -eq $sha1Checksum) {
-            continue
-        }
-        $spdxFileCount++
-        $dependencyFileCopy = $dependencyFile | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
-        $oldFileId = [string](Get-JsonProperty $dependencyFile 'SPDXID')
-        $newFileId = 'SPDXRef-File-' + (ConvertTo-Slug "$componentName-$(Get-JsonProperty $dependencyFile 'fileName')-$spdxFileCount")
-        $dependencyFileCopy.SPDXID = $newFileId
-        $spdx.files += $dependencyFileCopy
-        $spdxIdMap[$oldFileId] = $newFileId
     }
     foreach ($license in ConvertTo-Array (Get-JsonProperty $dependencySbom 'hasExtractedLicensingInfos')) {
         $licenseId = [string](Get-JsonProperty $license 'licenseId')

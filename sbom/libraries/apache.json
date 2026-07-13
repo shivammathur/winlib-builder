@@ -19,6 +19,12 @@
   },
   "purl": "pkg:generic/apache-httpd@{upstreamVersion}",
   "cpe": "cpe:2.3:a:apache:http_server:{upstreamVersion}:*:*:*:*:*:*:*",
+  "spdxPackageOverrides": {
+    "zherczeg/sljit": {
+      "supplier": "Person: Zoltan Herczeg",
+      "licenseConcluded": "BSD-2-Clause"
+    }
+  },
   "notAffectedCves": [
     {
       "id": "CVE-1999-0289",
