@@ -38,6 +38,8 @@ jobs:
           arch: ${{matrix.arch}}
           toolset: ${{steps.virtuals.outputs.toolset}}
       - name: Build argon2
+        env:
+          _CL_: ${{ matrix.arch == 'x86' && '/volatile:iso' || '' }}
         run: |
           cd argon2
           nmake /f Makefile.vc
