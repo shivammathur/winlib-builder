@@ -1015,6 +1015,7 @@ foreach ($embeddedEntry in ConvertTo-Array (Get-JsonProperty $entry 'components'
         purl = $embeddedPurl
         licenses = @(New-CycloneDxLicenseChoice -License (Get-JsonProperty $embeddedEntry 'license'))
         copyright = $embeddedCopyright
+        supplier = [ordered]@{ name = $author }
         externalReferences = @($embeddedReferences)
         properties = @($embeddedProperties)
     }
