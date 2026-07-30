@@ -62,6 +62,8 @@ jobs:
           cd libavif
           cmake --install . --config RelWithDebInfo --prefix ..\install
           xcopy RelWithDebInfo\avif_a.pdb ..\install\lib\*
+          xcopy avif_obj.dir\RelWithDebInfo\avif_obj.pdb ..\install\lib\*
+          xcopy _deps\libyuv-build\yuv_common_objects.dir\RelWithDebInfo\yuv_common_objects.pdb ..\install\lib\*
           rmdir /s /q ..\install\lib\pkgconfig
       - name: Copy license files
         run: |
