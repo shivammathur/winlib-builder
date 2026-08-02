@@ -155,7 +155,10 @@ function Get-BomRef {
 }
 
 function Get-GitInfo {
-    param([string[]]$Candidates)
+    param(
+        [string[]]$Candidates,
+        [string]$PreferredTag
+    )
 
     foreach ($candidate in $Candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique) {
         $path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($candidate)
@@ -170,10 +173,24 @@ function Get-GitInfo {
         }
 
         $remote = & git -C $path remote get-url origin 2>$null
-        $tag = & git -C $path describe --tags --exact-match HEAD 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            $tag = $null
-            $global:LASTEXITCODE = 0
+        $tag = $null
+        if (-not [string]::IsNullOrWhiteSpace($PreferredTag)) {
+            $matchingTags = @(& git -C $path tag --points-at HEAD --list $PreferredTag 2>$null)
+            if ($LASTEXITCODE -eq 0) {
+                $tag = $matchingTags |
+                    Where-Object { [string]::Equals([string]$_, $PreferredTag, [System.StringComparison]::OrdinalIgnoreCase) } |
+                    Select-Object -First 1
+            } else {
+                $global:LASTEXITCODE = 0
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$tag)) {
+            $tag = & git -C $path describe --tags --exact-match HEAD 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                $tag = $null
+                $global:LASTEXITCODE = 0
+            }
         }
 
         $repository = $null
@@ -714,7 +731,7 @@ $sourceCandidates = @(
     $libraryMetadata.Key,
     ($sourceRepository -replace '^.*/', '')
 ) + (ConvertTo-Array (Get-JsonProperty $entry 'aliases'))
-$gitInfo = Get-GitInfo -Candidates $sourceCandidates
+$gitInfo = Get-GitInfo -Candidates $sourceCandidates -PreferredTag $Version
 $checkoutRepository = if ($null -ne $patchedBuild) { $forkRepository } else { $sourceRepository }
 $checkoutRef = if ($null -ne $patchedBuild) { $forkTag } else { $sourceTag }
 $checkoutCommit = $null
