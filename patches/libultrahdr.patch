@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -600,2 +600,11 @@ target_include_directories(${IMAGEIO_TARGET_NAME} PRIVATE
+ add_library(${UHDR_CORE_LIB_NAME} STATIC ${UHDR_CORE_SRCS_LIST})
++if(MSVC)
++  set_target_properties(${IMAGEIO_TARGET_NAME} PROPERTIES
++    COMPILE_PDB_NAME uhdr_image_io
++    COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
++  set_target_properties(${UHDR_CORE_LIB_NAME} PROPERTIES
++    COMPILE_PDB_NAME uhdr_core
++    COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
++endif()
++
+ target_compile_options(${UHDR_CORE_LIB_NAME} PRIVATE ${UHDR_WERROR_FLAGS})

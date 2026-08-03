@@ -1,0 +1,12 @@
+diff --git a/libheif/CMakeLists.txt b/libheif/CMakeLists.txt
+--- a/libheif/CMakeLists.txt
++++ b/libheif/CMakeLists.txt
+@@ -231,2 +231,8 @@ set_target_properties(heif
++if(MSVC AND NOT BUILD_SHARED_LIBS)
++    set_target_properties(heif PROPERTIES
++        COMPILE_PDB_NAME heif_a
++        COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/libheif")
++endif()
++
+ if (APPLE)
+     set_target_properties(heif PROPERTIES

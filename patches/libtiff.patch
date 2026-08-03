@@ -1,0 +1,12 @@
+diff --git a/libtiff/CMakeLists.txt b/libtiff/CMakeLists.txt
+--- a/libtiff/CMakeLists.txt
++++ b/libtiff/CMakeLists.txt
+@@ -52,2 +52,8 @@ set(tiff_private_HEADERS
+ add_library(tiff ${TIFF_BUILD_LIB_VALUE} libtiff.def)
++if(MSVC AND TIFF_BUILD_LIB_VALUE STREQUAL "STATIC")
++  set_target_properties(tiff PROPERTIES
++    COMPILE_PDB_NAME tiff_a
++    COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/libtiff")
++endif()
++
+ add_library(TIFF::tiff ALIAS tiff)

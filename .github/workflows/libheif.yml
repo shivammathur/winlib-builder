@@ -43,6 +43,8 @@ jobs:
           path: libheif
           repository: winlibs/libheif
           ref: ${{ inputs.version }}
+      - name: Patch libheif
+        run: cd libheif && git apply --ignore-whitespace ..\winlib-builder\patches\libheif.patch
       - name: Checkout libjpeg-turbo
         uses: actions/checkout@v5
         with:
@@ -142,6 +144,8 @@ jobs:
           cmake -S libheif -B libheif\build-static
           -G Ninja
           -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase
           -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\deps"
           -DCMAKE_INCLUDE_PATH="%GITHUB_WORKSPACE%\deps\include"
           -DCMAKE_LIBRARY_PATH="%GITHUB_WORKSPACE%\deps\lib"
@@ -198,7 +202,8 @@ jobs:
           if exist libheif\build-shared\libheif\*.pdb copy /Y libheif\build-shared\libheif\*.pdb install\lib\
           copy /Y libheif\build-static\libheif\heif.lib install\lib\heif_a.lib
           if errorlevel 1 exit /b %errorlevel%
-          if exist libheif\build-static\libheif\heif.pdb copy /Y libheif\build-static\libheif\heif.pdb install\lib\heif_a.pdb
+          copy /Y libheif\build-static\libheif\heif_a.pdb install\lib\heif_a.pdb
+          if errorlevel 1 exit /b %errorlevel%
           copy /Y deps\lib\aom.lib install\lib\aom_a.lib
           copy /Y deps\lib\libdav1d.a install\lib\dav1d_a.lib
       - name: Verify libheif codecs
@@ -207,12 +212,13 @@ jobs:
           if not exist install\bin\heif.dll exit /b 1
           if not exist install\lib\heif.lib exit /b 1
           if not exist install\lib\heif_a.lib exit /b 1
+          if not exist install\lib\heif_a.pdb exit /b 1
           cl /nologo /W3 /MD /Iinstall\include winlib-builder\.github\ci\check-libheif.c /link /LIBPATH:install\lib heif.lib /OUT:check-libheif-shared.exe
           if errorlevel 1 exit /b %errorlevel%
           set PATH=%GITHUB_WORKSPACE%\install\bin;%PATH%
           check-libheif-shared.exe
           if errorlevel 1 exit /b %errorlevel%
-          cl /nologo /W3 /MD /DLIBHEIF_STATIC_BUILD /Iinstall\include winlib-builder\.github\ci\check-libheif.c /link /LIBPATH:install\lib /LIBPATH:deps\lib heif_a.lib aom_a.lib dav1d_a.lib jpeg.lib Advapi32.lib /OUT:check-libheif-static.exe
+          cl /nologo /W3 /MD /Zi /Fdcheck-libheif-static-compile.pdb /DLIBHEIF_STATIC_BUILD /Iinstall\include winlib-builder\.github\ci\check-libheif.c /link /DEBUG /WX /PDB:check-libheif-static.pdb /LIBPATH:install\lib /LIBPATH:deps\lib heif_a.lib aom_a.lib dav1d_a.lib jpeg.lib Advapi32.lib /OUT:check-libheif-static.exe
           if errorlevel 1 exit /b %errorlevel%
           check-libheif-static.exe
       - name: Remove private metadata

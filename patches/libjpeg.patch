@@ -1,0 +1,10 @@
+diff --git a/simd/CMakeLists.txt b/simd/CMakeLists.txt
+--- a/simd/CMakeLists.txt
++++ b/simd/CMakeLists.txt
+@@ -571,2 +571,6 @@ simd_fail("SIMD extensions not available for this CPU (${CMAKE_SYSTEM_PROCESSOR}
++if(MSVC AND TARGET simd)
++  set_target_properties(simd PROPERTIES COMPILE_PDB_NAME simd)
++endif()
++
+ if(WITH_SIMD AND ENABLE_STATIC)
+   add_executable(simdcoverage simdcoverage.c)
