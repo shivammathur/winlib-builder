@@ -1,0 +1,20 @@
+{
+  "$schema": "../schema.json",
+  "component": "hmailserver",
+  "sourcePath": "hmailserver",
+  "version": {
+    "stripPrefixes": [
+      "hmailserver-",
+      "hMailServer-"
+    ]
+  },
+  "upstream": {
+    "repository": "hmailserver/hmailserver",
+    "tag": "master"
+  },
+  "license": {
+    "id": "AGPL-3.0-only"
+  },
+  "homepage": "https://www.hmailserver.com/",
+  "purl": "pkg:generic/hmailserver@{upstreamVersion}"
+}

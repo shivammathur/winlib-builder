@@ -1,0 +1,96 @@
+name: Build boost
+run-name: "Build ${{ inputs.version }} for PHP ${{ inputs.php }}"
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Boost tag to build (for example, boost-1.90.0)
+        required: true
+      php:
+        description: PHP version to build for
+        required: true
+permissions:
+  contents: read
+env:
+  BOOST_TAG: ${{ inputs.version }}
+  PHP_VERSION: ${{ inputs.php }}
+defaults:
+  run:
+    shell: cmd
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+    runs-on: ${{ (inputs.php == '8.6' || inputs.php == 'master') && 'windows-2025-vs2026' || 'windows-2022' }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout winlib-builder
+        uses: actions/checkout@v6
+        with:
+          path: winlib-builder
+
+      - name: Compute virtual inputs
+        id: virtuals
+        run: powershell winlib-builder/scripts/compute-virtuals -version %PHP_VERSION% -arch ${{ matrix.arch }}
+
+      - name: Compute Boost inputs
+        id: boost
+        shell: pwsh
+        run: |
+          $release = $env:BOOST_TAG -replace '^boost-', ''
+          if ($release -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Unsupported Boost tag: $env:BOOST_TAG"
+          }
+          $msvc = if ('${{ steps.virtuals.outputs.vs }}' -eq 'vs16') { '14.2' } else { '14.3' }
+          $addressModel = if ('${{ matrix.arch }}' -eq 'x64') { '64' } else { '32' }
+          "release=$release" >> $env:GITHUB_OUTPUT
+          "directory=boost_$($release -replace '\.', '_')" >> $env:GITHUB_OUTPUT
+          "msvc=$msvc" >> $env:GITHUB_OUTPUT
+          "address_model=$addressModel" >> $env:GITHUB_OUTPUT
+
+      - name: Download Boost
+        run: |
+          curl.exe --fail --location --retry 3 --output boost.zip https://archives.boost.io/release/${{ steps.boost.outputs.release }}/source/${{ steps.boost.outputs.directory }}.zip
+          7z x boost.zip -y
+          move ${{ steps.boost.outputs.directory }} boost
+
+      - name: Setup MSVC development environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+          toolset: ${{ steps.virtuals.outputs.toolset }}
+
+      - name: Build Boost
+        run: |
+          cd boost
+          call bootstrap.bat msvc
+          echo @exit /b 0 > noop-setup.bat
+          echo using msvc : ${{ steps.boost.outputs.msvc }} : cl.exe : ^<setup^>"%CD%\noop-setup.bat" ^<rewrite-setup-scripts^>off ; > user-config.jam
+          b2.exe release threading=multi link=static runtime-link=shared architecture=x86 address-model=${{ steps.boost.outputs.address_model }} --without-graph_parallel --without-mpi --without-python --user-config=user-config.jam --toolset=msvc-${{ steps.boost.outputs.msvc }} --build-dir=out --stagedir=stage -j 4 stage
+
+      - name: Install Boost
+        run: |
+          xcopy /e /i /y boost\boost install\include\boost
+          xcopy /i /y boost\stage\lib\* install\lib
+
+      - name: Copy license files
+        run: xcopy boost\LICENSE_1_0.txt install\share\licenses\boost\*
+
+      - name: Generate SBOMs
+        shell: pwsh
+        run: >
+          .\winlib-builder\scripts\generate-sbom.ps1
+          -Library boost
+          -Version '${{ env.BOOST_TAG }}'
+          -InstallRoot 'install'
+          -Vs '${{ steps.virtuals.outputs.vs }}'
+          -Arch '${{ matrix.arch }}'
+          -PhpVersion '${{ env.PHP_VERSION }}'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BOOST_TAG }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
+          path: install
