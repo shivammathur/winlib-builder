@@ -13,3 +13,11 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 +endif()
 +
  target_compile_options(${UHDR_CORE_LIB_NAME} PRIVATE ${UHDR_WERROR_FLAGS})
+@@ -819,2 +828,7 @@ endif()
+ add_library(${UHDR_TARGET_NAME})
++if(MSVC AND NOT BUILD_SHARED_LIBS)
++  set_target_properties(${UHDR_TARGET_NAME} PROPERTIES
++    OUTPUT_NAME uhdr_a)
++endif()
++
+ add_dependencies(${UHDR_TARGET_NAME} ${UHDR_CORE_LIB_NAME})

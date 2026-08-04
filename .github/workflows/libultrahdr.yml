@@ -95,8 +95,7 @@ jobs:
           mkdir install\include
           mkdir install\lib
           copy /Y libultrahdr\ultrahdr_api.h install\include\
-          if exist libultrahdr\build-static\uhdr-static.lib copy /Y libultrahdr\build-static\uhdr-static.lib install\lib\uhdr_a.lib
-          if exist libultrahdr\build-static\uhdr.lib copy /Y libultrahdr\build-static\uhdr.lib install\lib\uhdr_a.lib
+          copy /Y libultrahdr\build-static\uhdr_a.lib install\lib\
           copy /Y libultrahdr\build-static\uhdr_core.pdb install\lib\
           copy /Y libultrahdr\build-static\uhdr_image_io.pdb install\lib\
       - name: Verify libultrahdr artifacts
