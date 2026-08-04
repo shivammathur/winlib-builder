@@ -63,12 +63,14 @@ jobs:
         run: echo CMAKE_WORKSPACE=%GITHUB_WORKSPACE:\=/%>>"%GITHUB_ENV%"
       - name: Configure libultrahdr
         run: >-
-          cmake -S libultrahdr -B libultrahdr\build
+          cmake -S libultrahdr -B libultrahdr\build-static
           -G Ninja
           -DCMAKE_BUILD_TYPE=RelWithDebInfo
           -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
           -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase
-          -DBUILD_SHARED_LIBS=ON
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_FOR_WINUI=ON
           -DUHDR_BUILD_EXAMPLES=OFF
           -DUHDR_BUILD_TESTS=OFF
           -DUHDR_BUILD_BENCHMARK=OFF
@@ -85,30 +87,24 @@ jobs:
           -DJPEG_LIBRARY="%CMAKE_WORKSPACE%/deps/lib/libjpeg_a.lib"
           -DJPEG_LIBRARY_RELEASE="%CMAKE_WORKSPACE%/deps/lib/libjpeg_a.lib"
       - name: Build libultrahdr
-        run: cmake --build libultrahdr\build --config RelWithDebInfo
+        run: |
+          cmake --build libultrahdr\build-static --config RelWithDebInfo
+          if errorlevel 1 exit /b %errorlevel%
       - name: Stage libultrahdr
         run: |
           mkdir install\include
           mkdir install\lib
-          mkdir install\bin
           copy /Y libultrahdr\ultrahdr_api.h install\include\
-          copy /Y libultrahdr\build\uhdr.dll install\bin\
-          copy /Y libultrahdr\build\uhdr.lib install\lib\
-          copy /Y libultrahdr\build\uhdr-static.lib install\lib\uhdr_a.lib
-          if exist libultrahdr\build\*.pdb copy /Y libultrahdr\build\*.pdb install\lib\
+          if exist libultrahdr\build-static\uhdr-static.lib copy /Y libultrahdr\build-static\uhdr-static.lib install\lib\uhdr_a.lib
+          if exist libultrahdr\build-static\uhdr.lib copy /Y libultrahdr\build-static\uhdr.lib install\lib\uhdr_a.lib
+          copy /Y libultrahdr\build-static\uhdr_core.pdb install\lib\
+          copy /Y libultrahdr\build-static\uhdr_image_io.pdb install\lib\
       - name: Verify libultrahdr artifacts
         run: |
           if not exist install\include\ultrahdr_api.h exit /b 1
-          if not exist install\bin\uhdr.dll exit /b 1
-          if not exist install\lib\uhdr.lib exit /b 1
           if not exist install\lib\uhdr_a.lib exit /b 1
           if not exist install\lib\uhdr_core.pdb exit /b 1
           if not exist install\lib\uhdr_image_io.pdb exit /b 1
-          cl /nologo /W3 /MD /DUHDR_USING_SHARED_LIBRARY /Iinstall\include winlib-builder\.github\ci\check-libultrahdr.c /link /LIBPATH:install\lib uhdr.lib /OUT:check-libultrahdr-shared.exe
-          if errorlevel 1 exit /b %errorlevel%
-          set PATH=%GITHUB_WORKSPACE%\install\bin;%PATH%
-          check-libultrahdr-shared.exe
-          if errorlevel 1 exit /b %errorlevel%
           cl /nologo /W3 /MD /Zi /Fdcheck-libultrahdr-static-compile.pdb /Iinstall\include winlib-builder\.github\ci\check-libultrahdr.c /link /DEBUG /WX /PDB:check-libultrahdr-static.pdb /LIBPATH:install\lib /LIBPATH:deps\lib uhdr_a.lib libjpeg_a.lib /OUT:check-libultrahdr-static.exe
           if errorlevel 1 exit /b %errorlevel%
           check-libultrahdr-static.exe
