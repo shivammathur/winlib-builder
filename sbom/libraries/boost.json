@@ -1,0 +1,17 @@
+{
+  "$schema": "../schema.json",
+  "component": "boost",
+  "version": {
+    "stripPrefixes": [
+      "boost-"
+    ]
+  },
+  "upstream": {
+    "repository": "boostorg/boost",
+    "tagTemplate": "boost-{version}"
+  },
+  "license": {
+    "id": "BSL-1.0"
+  },
+  "purl": "pkg:generic/boost@{upstreamVersion}"
+}

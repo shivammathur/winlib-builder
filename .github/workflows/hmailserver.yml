@@ -1,0 +1,227 @@
+name: Build hMailServer
+run-name: "Build hMailServer-${{ inputs.tag }}"
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: hMailServer repository to build
+        required: true
+        default: hmailserver/hmailserver
+      ref:
+        description: hMailServer branch, tag, or commit to build
+        required: true
+        default: master
+      tag:
+        description: Package tag used in the final artifact name (for example, 5.7.0)
+        required: true
+      workflow_run_ids:
+        description: Comma-separated winlib-builder workflow run IDs to download dependency artifacts from
+        required: false
+      workflow_run_repository:
+        description: Repository containing dependency workflow runs
+        required: false
+permissions:
+  actions: read
+  contents: read
+env:
+  PHP_VERSION: master
+  WORKFLOW_RUN_IDS: ${{ inputs.workflow_run_ids }}
+  WORKFLOW_RUN_REPOSITORY: ${{ inputs.workflow_run_repository }}
+  HMAILSERVER_REPOSITORY: ${{ inputs.repository }}
+  HMAILSERVER_REF: ${{ inputs.ref }}
+  PACKAGE_TAG: ${{ inputs.tag }}
+defaults:
+  run:
+    shell: cmd
+jobs:
+  build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 120
+    steps:
+      - name: Checkout winlib-builder
+        uses: actions/checkout@v6
+        with:
+          path: winlib-builder
+
+      - name: Checkout hMailServer
+        uses: actions/checkout@v6
+        with:
+          path: hmailserver
+          repository: ${{ env.HMAILSERVER_REPOSITORY }}
+          ref: ${{ env.HMAILSERVER_REF }}
+
+      - name: Compute virtual inputs
+        id: virtuals
+        run: powershell winlib-builder/scripts/compute-virtuals -version %PHP_VERSION% -arch x64
+
+      - name: Fetch dependencies
+        run: powershell winlib-builder/scripts/fetch-deps -lib hmailserver -version %PHP_VERSION% -vs ${{ steps.virtuals.outputs.vs }} -arch x64 -stability staging -workflow_run_ids:'%WORKFLOW_RUN_IDS%' -repository:'%WORKFLOW_RUN_REPOSITORY%'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Setup MSVC development environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          toolset: ${{ steps.virtuals.outputs.toolset }}
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Install .NET Framework 4.5 reference assemblies
+        run: nuget install Microsoft.NETFramework.ReferenceAssemblies.net45 -Version 1.0.3 -OutputDirectory netfx -ExcludeVersion
+
+      - name: Prepare hMailServer dependency layout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $boostRoot = 'hmailserver-libs/boost_1_90_0'
+          $opensslRoot = 'hmailserver-libs/openssl-3.5.5/out64'
+          $libpqRoot = 'hmailserver-libs/postgresql-15.18'
+          $libpqInclude = Join-Path $libpqRoot 'src/interfaces/libpq'
+          $postgresInclude = Join-Path $libpqRoot 'src/include'
+          $libpqOutput = Join-Path $libpqRoot 'Release/libpq'
+
+          foreach ($path in @(
+              (Join-Path $boostRoot 'stage/lib'),
+              (Join-Path $opensslRoot 'include'),
+              (Join-Path $opensslRoot 'lib'),
+              (Join-Path $opensslRoot 'bin'),
+              $libpqInclude,
+              $postgresInclude,
+              $libpqOutput
+          )) {
+              New-Item -Path $path -ItemType Directory -Force | Out-Null
+          }
+
+          Copy-Item -LiteralPath 'deps/include/boost' -Destination $boostRoot -Recurse
+          Copy-Item -Path 'deps/lib/*boost*.lib' -Destination (Join-Path $boostRoot 'stage/lib')
+
+          Copy-Item -LiteralPath 'deps/include/openssl' -Destination (Join-Path $opensslRoot 'include') -Recurse
+          Copy-Item -LiteralPath 'deps/lib/libcrypto.lib' -Destination (Join-Path $opensslRoot 'lib')
+          Copy-Item -LiteralPath 'deps/lib/libssl.lib' -Destination (Join-Path $opensslRoot 'lib')
+          Copy-Item -Path 'deps/bin/libcrypto-3-x64.dll', 'deps/bin/libssl-3-x64.dll' -Destination (Join-Path $opensslRoot 'bin')
+
+          Copy-Item -Path 'deps/include/libpq/*' -Destination $libpqInclude -Recurse
+          Copy-Item -Path 'deps/include/libpq/*' -Destination $postgresInclude -Recurse
+          Copy-Item -LiteralPath 'deps/lib/libpq.lib' -Destination $libpqOutput
+          Copy-Item -LiteralPath 'deps/bin/libpq.dll' -Destination $libpqOutput
+
+          $redistRoot = Join-Path $env:VCToolsRedistDir 'x64'
+          $crt = Get-ChildItem -LiteralPath $redistRoot -Directory -Filter 'Microsoft.VC*.CRT' | Select-Object -First 1
+          if ($null -eq $crt) {
+              throw "Unable to find the Visual C++ runtime under $redistRoot."
+          }
+          Copy-Item -Path (Join-Path $crt.FullName '*') -Destination 'hmailserver/hmailserver/installation/Microsoft.VC142.CRT' -Force
+
+      - name: Build hMailServer
+        run: |
+          set "hMailServerLibs=%GITHUB_WORKSPACE%\hmailserver-libs"
+          msbuild hmailserver\hmailserver\source\Server\hMailServer\hMailServer.sln /m /p:Configuration=Release;Platform=x64;PlatformToolset=${{ steps.virtuals.outputs.msts }};WindowsTargetPlatformVersion=${{ steps.virtuals.outputs.winsdk }}
+        env:
+          CL: /DOPENSSL_SUPPRESS_DEPRECATED
+
+      - name: Build hMailServer tools
+        run: |
+          set "hMailServerLibs=%GITHUB_WORKSPACE%\hmailserver-libs"
+          msbuild "hmailserver\hmailserver\source\Tools\hMailServer Tools.sln" /m /p:Configuration=Release;Platform=x64;TargetFrameworkRootPath=%GITHUB_WORKSPACE%\netfx\Microsoft.NETFramework.ReferenceAssemblies.net45\build
+
+      - name: Prepare installer inputs
+        run: copy /y hmailserver\hmailserver\source\Server\hMailServer\hMailServer\x64\Release\hMailServer.tlb hmailserver\hmailserver\source\Server\hMailServer\x64\Release\hMailServer.tlb
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-6.2.2.exe'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_2_2/innosetup-6.2.2.exe' -OutFile $installer
+          $expectedHash = '8117D10D00A2AD33A1390978EA3872861C330E087914410A6377B22C4C5B8563'
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expectedHash) {
+              throw 'Inno Setup installer hash verification failed.'
+          }
+          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'inno-setup'
+          $process = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$installRoot" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+              throw "Inno Setup installation failed with exit code $($process.ExitCode)."
+          }
+
+      - name: Build installer
+        run: |
+          set "hMailServerLibs=%GITHUB_WORKSPACE%\hmailserver-libs"
+          "%GITHUB_WORKSPACE%\inno-setup\ISCC.exe" hmailserver\hmailserver\installation\hMailServer64.iss
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'install'
+          $binRoot = Join-Path $installRoot 'bin'
+          $licenseRoot = Join-Path $installRoot 'share/licenses'
+          New-Item -Path $binRoot -ItemType Directory -Force | Out-Null
+          New-Item -Path (Join-Path $licenseRoot 'hmailserver') -ItemType Directory -Force | Out-Null
+
+          $installer = Get-ChildItem -Path 'hmailserver/hmailserver/installation' -Filter 'hMailServer-*.exe' -File -Recurse
+          if (@($installer).Count -ne 1) {
+              throw "Expected one hMailServer installer, found $(@($installer).Count)."
+          }
+          Copy-Item -LiteralPath $installer.FullName -Destination (Join-Path $binRoot 'hMailServer.exe')
+
+          Copy-Item -LiteralPath 'hmailserver/hmailserver/installation/License.rtf' -Destination (Join-Path $licenseRoot 'hmailserver/License.rtf')
+          Copy-Item -Path 'hmailserver/hmailserver/docs/Licenses/*' -Destination (Join-Path $licenseRoot 'hmailserver') -Recurse
+          Copy-Item -LiteralPath 'hmailserver/hmailserver/installation/Extras/7za.exe.license.txt' -Destination (Join-Path $licenseRoot 'hmailserver/7za.exe.license.txt')
+          Copy-Item -Path 'deps/share/licenses/*' -Destination $licenseRoot -Recurse -Force
+
+          $sourceCommit = (git -C hmailserver rev-parse HEAD).Trim()
+          $builderCommit = (git -C winlib-builder rev-parse HEAD).Trim()
+          $boostVersion = (Get-Content -LiteralPath 'deps/share/sbom/boost.cdx.json' -Raw | ConvertFrom-Json).metadata.component.version
+          $opensslVersion = (Get-Content -LiteralPath 'deps/share/sbom/openssl.cdx.json' -Raw | ConvertFrom-Json).metadata.component.version
+          $libpqVersion = (Get-Content -LiteralPath 'deps/share/sbom/libpq.cdx.json' -Raw | ConvertFrom-Json).metadata.component.version
+          $source = @"
+          Repository: https://github.com/$env:HMAILSERVER_REPOSITORY
+          Requested ref: $env:HMAILSERVER_REF
+          Commit: $sourceCommit
+          Source archive: https://github.com/$env:HMAILSERVER_REPOSITORY/archive/$sourceCommit.zip
+          Build scripts: https://github.com/$env:GITHUB_REPOSITORY/blob/$builderCommit/.github/workflows/hmailserver.yml
+          Build scripts commit: $builderCommit
+          "@
+          Set-Content -LiteralPath (Join-Path $installRoot 'SOURCE.txt') -Value $source.Trim() -Encoding utf8
+
+      - name: Generate SBOMs
+        shell: pwsh
+        run: >
+          .\winlib-builder\scripts\generate-sbom.ps1
+          -Library hmailserver
+          -Version '${{ env.PACKAGE_TAG }}'
+          -InstallRoot 'install'
+          -Vs '${{ steps.virtuals.outputs.vs }}'
+          -Arch 'x64'
+          -PhpVersion '${{ env.PHP_VERSION }}'
+
+      - name: Verify package layout
+        shell: pwsh
+        run: |
+          $required = @(
+              'install/bin/hMailServer.exe',
+              'install/SOURCE.txt',
+              'install/share/licenses/hmailserver/License.rtf',
+              'install/share/licenses/boost/LICENSE_1_0.txt',
+              'install/share/licenses/openssl/LICENSE.txt',
+              'install/share/licenses/libpq/COPYRIGHT',
+              'install/share/sbom/hmailserver.cdx.json',
+              'install/share/sbom/hmailserver.spdx.json'
+          )
+          foreach ($path in $required) {
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                  throw "Missing package file: $path"
+              }
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: hmailserver-${{ env.PACKAGE_TAG }}-${{ steps.virtuals.outputs.vs }}-x64
+          path: install
