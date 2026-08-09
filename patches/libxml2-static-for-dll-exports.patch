@@ -1,0 +1,17 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d3a7f0a3..5c1158e0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -320,2 +320,2 @@
+-if(WIN32)
++if(WIN32 AND BUILD_SHARED_LIBS)
+     list(APPEND LIBXML2_SRCS win32/libxml2.rc)
+diff --git a/include/libxml/xmlexports.h b/include/libxml/xmlexports.h
+index a1a8c50a..0db7efe7 100644
+--- a/include/libxml/xmlexports.h
++++ b/include/libxml/xmlexports.h
+@@ -18,2 +18,3 @@
+-#if (defined(_WIN32) || defined(__CYGWIN__)) && !defined(LIBXML_STATIC)
++#if (defined(_WIN32) || defined(__CYGWIN__)) && \
++    (!defined(LIBXML_STATIC) || (defined(IN_LIBXML) && defined(LIBXML_STATIC_FOR_DLL)))
+   #if defined(IN_LIBXML)

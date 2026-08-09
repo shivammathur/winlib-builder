@@ -44,6 +44,9 @@ jobs:
           path: libxml2
           repository: winlibs/libxml2
           ref: ${{github.event.inputs.version}}
+      - name: Export public symbols from the static-for-DLL build
+        shell: bash
+        run: git -C libxml2 apply ../winlib-builder/patches/libxml2-static-for-dll-exports.patch
       - name: Compute virtual inputs
         id: virtuals
         run: powershell winlib-builder/scripts/compute-virtuals -version ${{github.event.inputs.php}} -arch ${{matrix.arch}}
