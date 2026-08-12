@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          arch: [x64, x86]
+          arch: [x64, x86, arm64]
     runs-on: ${{ (inputs.php == '8.6' || inputs.php == 'master') && 'windows-2025-vs2026' || 'windows-2022' }}
     steps:
       - name: Checkout winlib-builder
@@ -69,7 +69,7 @@ jobs:
       - name: Setup MSVC development environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{matrix.arch}}
+          arch: ${{ matrix.arch == 'arm64' && 'amd64_arm64' || matrix.arch }}
           toolset: ${{steps.virtuals.outputs.toolset}}
       - name: Configure shared libxml2
         run: |
