@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, x86]
+        arch: [x64, x86, arm64]
     runs-on: ${{ (inputs.php == '8.6' || inputs.php == 'master') && 'windows-2025-vs2026' || 'windows-2022' }}
     steps:
       - name: Disable Git CRLF conversion
@@ -40,7 +40,7 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{matrix.arch}}
+          arch: ${{ matrix.arch == 'arm64' && 'amd64_arm64' || matrix.arch }}
           sdk: ${{steps.virtuals.outputs.winsdk}}
           toolset: ${{steps.virtuals.outputs.toolset}}
       - name: Setup Cygwin
@@ -50,7 +50,7 @@ jobs:
       - name: Build gettext
         shell: pwsh
         env:
-          HOST_TRIPLET: ${{matrix.arch == 'x64' && 'x86_64-w64-mingw32' || 'i686-w64-mingw32'}}
+          HOST_TRIPLET: ${{ matrix.arch == 'x64' && 'x86_64-w64-mingw32' || matrix.arch == 'arm64' && 'aarch64-w64-mingw32' || 'i686-w64-mingw32' }}
         run: |
           $script = @'
           win_to_cygpath() {
@@ -91,6 +91,8 @@ jobs:
             NM="dumpbin.exe -symbols" \
             STRIP=":" \
             AR="$workspace/winlib-builder/autotools/ar-lib lib.exe" \
+            WINDRES="$workspace/winlib-builder/autotools/windres" \
+            RC="$workspace/winlib-builder/autotools/windres" \
             RANLIB=":" || { cat config.log; exit 1; }
           touch aclocal.m4 configure config.h.in Makefile.in
           touch intl/aclocal.m4 intl/configure intl/config.h.in intl/Makefile.in intl/gnulib-lib/Makefile.in
@@ -108,7 +110,7 @@ jobs:
       - name: Normalize gettext install
         shell: pwsh
         env:
-          LIB_MACHINE: ${{matrix.arch == 'x64' && 'X64' || 'X86'}}
+          LIB_MACHINE: ${{ matrix.arch == 'x64' && 'X64' || matrix.arch == 'arm64' && 'ARM64' || 'X86' }}
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path install/bin, install/include, install/lib | Out-Null

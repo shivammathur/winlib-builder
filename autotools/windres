@@ -1,5 +1,7 @@
 #! /bin/sh
 
+set -e
+
 DEFINES=()
 
 while [[ $# -gt 0 ]]; do
@@ -30,7 +32,9 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -D*)
-      DEFINES+=("$1")
+      # GNU windres accepts escaped quotes in macro values. Normalize them to
+      # literal quotes before Cygwin constructs the rc.exe command line.
+      DEFINES+=("${1//\\\"/\"}")
       shift
       ;;
     -*)
@@ -44,6 +48,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-rc.exe ${DEFINES[@]} -fo ${OUTPUT}.res ${INPUT}
-cvtres.exe -machine:${Platform} -out:${OUTPUT} ${OUTPUT}.res
-rm ${OUTPUT}.res
+rc.exe "${DEFINES[@]}" -fo "${OUTPUT}.res" "$INPUT"
+cvtres.exe "-machine:${Platform}" "-out:${OUTPUT}" "${OUTPUT}.res"
+rm "${OUTPUT}.res"
