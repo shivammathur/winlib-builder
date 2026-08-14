@@ -1,0 +1,21 @@
+{
+  "$schema": "../schema.json",
+  "component": "gmp",
+  "sourceUrl": "https://gmplib.org/download/gmp/gmp-{upstreamVersion}.tar.xz",
+  "version": {
+    "stripPrefixes": [
+      "gmp-"
+    ]
+  },
+  "upstream": {
+    "url": "https://gmplib.org/",
+    "tagTemplate": "{version}",
+    "tagUrlTemplate": "https://gmplib.org/download/gmp/gmp-{version}.tar.xz"
+  },
+  "license": {
+    "expression": "LGPL-3.0-or-later OR GPL-2.0-or-later"
+  },
+  "homepage": "https://gmplib.org/",
+  "purl": "pkg:generic/gmp@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:gmplib:gmp:{upstreamVersion}:*:*:*:*:*:*:*"
+}

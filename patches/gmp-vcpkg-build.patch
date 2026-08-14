@@ -1,0 +1,47 @@
+diff --git a/ports/gmp/portfile.cmake b/ports/gmp/portfile.cmake
+index bb096e1ff..63f49dcef 100644
+--- a/ports/gmp/portfile.cmake
++++ b/ports/gmp/portfile.cmake
+@@ -83,2 +83,2 @@ endif()
+-if(VCPKG_CROSSCOMPILING)
++if(VCPKG_CROSSCOMPILING AND NOT (VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64)$"))
+     set(ENV{HOST_TOOLS_PREFIX} "${CURRENT_HOST_INSTALLED_DIR}/manual-tools/${PORT}")
+@@ -87,2 +87,5 @@ endif()
+-if(VCPKG_HOST_IS_WINDOWS AND (NOT DEFINED VCPKG_MAKE_ACQUIRE_MSYS OR VCPKG_MAKE_ACQUIRE_MSYS))
++if(VCPKG_HOST_IS_WINDOWS AND DEFINED ENV{GMP_MSYS2_ROOT})
++    vcpkg_add_to_path("$ENV{GMP_MSYS2_ROOT}/usr/bin")
++    set(VCPKG_MAKE_ACQUIRE_MSYS FALSE)
++elseif(VCPKG_HOST_IS_WINDOWS AND (NOT DEFINED VCPKG_MAKE_ACQUIRE_MSYS OR VCPKG_MAKE_ACQUIRE_MSYS))
+     # dumpbin detection fails with autoconf 2.72
+@@ -90,6 +93,6 @@ if(VCPKG_HOST_IS_WINDOWS AND (NOT DEFINED VCPKG_MAKE_ACQUIRE_MSYS OR VCPKG_MAKE_
+     vcpkg_acquire_msys(MSYS_ROOT
+         PACKAGES autoconf-wrapper automake-wrapper autoconf-archive binutils libtool make which
+         DIRECT_PACKAGES
+-            "https://mirror.msys2.org/msys/x86_64/autoconf2.71-2.71-3-any.pkg.tar.zst"
+-            dd312c428b2e19afd00899eb53ea4255794dea4c19d1d6dea2419cb6a54209ea2130d48abbc20af12196b9f628143436f736fbf889809c2c2291be0c69c0e306
++            "https://mirror.msys2.org/msys/x86_64/autoconf2.71-2.71-4-any.pkg.tar.zst"
++            c93b791eb55893cbe7c425e764074837355fd165deb7b1775f652c8e25d9d1f0cdd4120ab710d56fb859b7df55c4f971eccda7c112448f60615bff8a2dc81166
+     )
+@@ -98,9 +101,8 @@ endif()
+ endif()
+ vcpkg_make_configure(
+     SOURCE_PATH "${SOURCE_PATH}"
+     AUTORECONF
+-    LANGUAGES ASM C CXX
++    LANGUAGES ASM C
+     OPTIONS
+         ${OPTIONS}
+-        --enable-cxx
+         --with-pic
+diff --git a/ports/gmp/vcpkg.json b/ports/gmp/vcpkg.json
+index 285261a23..205c28060 100644
+--- a/ports/gmp/vcpkg.json
++++ b/ports/gmp/vcpkg.json
+@@ -9,7 +9,3 @@
+   "dependencies": [
+-    {
+-      "name": "gmp",
+-      "host": true
+-    },
+     {
+       "name": "vcpkg-cmake-get-vars",

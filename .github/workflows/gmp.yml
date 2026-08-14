@@ -1,0 +1,199 @@
+name: Build GMP
+run-name: "Build ${{ inputs.version }} for PHP ${{ inputs.php }}"
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: GMP version to build
+        required: true
+        default: '6.3.0'
+      php:
+        description: PHP version to build for
+        required: true
+        default: 'master'
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+    runs-on: ${{ (inputs.php == '8.6' || inputs.php == 'master') && 'windows-2025-vs2026' || 'windows-2022' }}
+    steps:
+      - name: Checkout winlib-builder
+        uses: actions/checkout@v6
+        with:
+          path: winlib-builder
+
+      - name: Checkout vcpkg build recipe
+        uses: actions/checkout@v6
+        with:
+          repository: microsoft/vcpkg
+          ref: 496a397e0e13e5cc6f897f740986a9523f3a282d
+          path: vcpkg
+
+      - name: Patch GMP build recipe
+        shell: cmd
+        run: cd vcpkg && git apply --check --ignore-whitespace ..\winlib-builder\patches\gmp-vcpkg-build.patch && git apply --ignore-whitespace ..\winlib-builder\patches\gmp-vcpkg-build.patch
+
+      - name: Compute virtual inputs
+        id: virtuals
+        shell: cmd
+        run: powershell winlib-builder/scripts/compute-virtuals -version ${{ inputs.php }} -arch ${{ matrix.arch }}
+
+      - name: Verify GMP port version
+        shell: pwsh
+        run: |
+          $port = Get-Content 'vcpkg/ports/gmp/vcpkg.json' -Raw | ConvertFrom-Json
+          if ($port.version -ne '${{ inputs.version }}') {
+              throw "The pinned vcpkg GMP port is $($port.version), not ${{ inputs.version }}"
+          }
+
+      - name: Setup MSVC development environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+          sdk: ${{ steps.virtuals.outputs.winsdk }}
+          toolset: ${{ steps.virtuals.outputs.toolset }}
+
+      - name: Setup GMP build tools
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          install: >-
+            autoconf-wrapper
+            autoconf2.71
+            automake-wrapper
+            autoconf-archive
+            binutils
+            libtool
+            make
+            which
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Build static GMP
+        shell: pwsh
+        env:
+          GMP_MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+          GMP_PLATFORM_TOOLSET: ${{ steps.virtuals.outputs.msts }}
+          VCPKG_BINARY_SOURCES: clear
+          WANT_AUTOCONF: '2.71'
+        run: |
+          New-Item -ItemType Directory -Force -Path install/lib | Out-Null
+          $triplet = '${{ matrix.arch }}-php-static-md'
+          & vcpkg/vcpkg.exe install "gmp:$triplet" `
+              "--overlay-triplets=$env:GITHUB_WORKSPACE/winlib-builder/triplets" `
+              "--x-install-root=$env:GITHUB_WORKSPACE/vcpkg-installed"
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }
+
+      - name: Install GMP
+        shell: pwsh
+        run: |
+          $triplet = '${{ matrix.arch }}-php-static-md'
+          $package = "vcpkg-installed/$triplet"
+          New-Item -ItemType Directory -Force -Path install/include, install/lib, install/share/licenses/gmp | Out-Null
+          Copy-Item "$package/include/gmp.h" install/include/gmp.h
+          Copy-Item "$package/lib/gmp.lib" install/lib/gmp_a.lib
+          Copy-Item "$package/share/gmp/copyright" install/share/licenses/gmp/COPYING
+
+          $required = @(
+              'install/include/gmp.h',
+              'install/lib/gmp_a.lib',
+              'install/share/licenses/gmp/COPYING'
+          )
+          foreach ($file in $required) {
+              if (!(Test-Path -LiteralPath $file -PathType Leaf)) {
+                  throw "Missing required GMP artifact: $file"
+              }
+          }
+
+      - name: Verify GMP library
+        shell: pwsh
+        run: |
+          $machine = '${{ matrix.arch }}' -eq 'x64' ? '8664 machine (x64)' : '14C machine (x86)'
+          $headers = & dumpbin /headers install/lib/gmp_a.lib | Out-String
+          if ($headers -notmatch [regex]::Escape($machine)) {
+              throw "gmp_a.lib does not contain the expected ${{ matrix.arch }} objects"
+          }
+
+          $directives = & dumpbin /directives install/lib/gmp_a.lib | Out-String
+          if ($directives -notmatch '(?i)/DEFAULTLIB:MSVCRT') {
+              throw 'gmp_a.lib does not use the MSVC dynamic CRT'
+          }
+          if ($directives -match '(?i)/DEFAULTLIB:LIBCMT') {
+              throw 'gmp_a.lib contains static MSVC CRT directives'
+          }
+
+          $symbols = & dumpbin /symbols install/lib/gmp_a.lib | Out-String
+          if ($symbols -match '(?i)(libgcc|libstdc\+\+|libwinpthread|msys-2\.0|mingw|__gcc_|_Unwind_|__emutls|__chkstk_ms)') {
+              throw 'gmp_a.lib contains MinGW or GCC runtime symbols'
+          }
+
+          $source = @'
+          #include <stdio.h>
+          #include <string.h>
+          #include <gmp.h>
+
+          int main(void) {
+              mpz_t base, exponent, modulus, result;
+              mpz_inits(base, exponent, modulus, result, NULL);
+              mpz_set_ui(base, 4);
+              mpz_set_ui(exponent, 13);
+              mpz_set_ui(modulus, 497);
+              mpz_powm_sec(result, base, exponent, modulus);
+              if (mpz_cmp_ui(result, 445) != 0) return 1;
+              mpz_prevprime(result, modulus);
+              if (mpz_cmp_ui(result, 491) != 0) return 2;
+              if (strcmp(gmp_version, "${{ inputs.version }}") != 0) return 3;
+              mpz_clears(base, exponent, modulus, result, NULL);
+              return 0;
+          }
+          '@
+          Set-Content -LiteralPath gmp-smoke.c -Value $source -Encoding ASCII
+          & cl.exe /nologo /W4 /MD /Z7 /Iinstall/include gmp-smoke.c `
+              /link /debug:full /out:gmp-smoke.exe /pdb:install/lib/gmp_a.pdb `
+              /wholearchive:install/lib/gmp_a.lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path -LiteralPath install/lib/gmp_a.pdb -PathType Leaf)) {
+              throw 'The MSVC whole-archive link did not produce gmp_a.pdb'
+          }
+          & ./gmp-smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $dependencies = & dumpbin /dependents gmp-smoke.exe | Out-String
+          if ($dependencies -match '(?i)(libgcc|libstdc\+\+|libwinpthread|msys-2\.0|mingw)') {
+              throw 'The GMP smoke executable depends on a MinGW or MSYS2 runtime'
+          }
+
+      - name: Generate SBOMs
+        shell: pwsh
+        run: >
+          ./winlib-builder/scripts/generate-sbom.ps1
+          -Library gmp
+          -Version '${{ inputs.version }}'
+          -InstallRoot 'install'
+          -Vs '${{ steps.virtuals.outputs.vs }}'
+          -Arch '${{ matrix.arch }}'
+          -PhpVersion '${{ inputs.php }}'
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gmp-${{ inputs.version }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}-logs
+          if-no-files-found: ignore
+          path: |
+            vcpkg/buildtrees/gmp/**/*.log
+            vcpkg/buildtrees/gmp/**/*.txt
+            vcpkg/buildtrees/gmp/**/*.xml
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: gmp-${{ inputs.version }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
+          path: install
