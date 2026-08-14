@@ -84,7 +84,7 @@ jobs:
           )
           > winlibs.sh echo export PATH=/usr/local/bin:/usr/bin:/bin:/opt/bin:$PATH
           >>winlibs.sh echo pacman -S --noconfirm make groff
-          >>winlibs.sh echo ./configure --host=%HOST_TRIPLET% --disable-slapd --disable-shared --prefix='${pcfiledir}/../..' --includedir='${prefix}/include/openldap' --sysconfdir=/c/openldap/sysconf --with-subdir=no \
+          >>winlibs.sh echo ./configure --host=%HOST_TRIPLET% --disable-slapd --disable-shared --disable-versioning --prefix='${pcfiledir}/../..' --includedir='${prefix}/include/openldap' --sysconfdir=/c/openldap/sysconf --with-subdir=no \
           >>winlibs.sh echo   CC='%WORKSPACE%/winlib-builder/autotools/compile cl -nologo' \
           >>winlibs.sh echo   AR='%WORKSPACE%/winlib-builder/autotools/ar-lib lib' \
           >>winlibs.sh echo   NM='dumpbin -symbols' \
