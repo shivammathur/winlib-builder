@@ -675,6 +675,11 @@ if ([string]::IsNullOrWhiteSpace($sourceBaseUrl) -and -not [string]::IsNullOrWhi
     $sourceBaseUrl = "https://github.com/$sourceRepository"
 }
 $upstreamVersion = Get-DefaultUpstreamVersion -PackageVersion $packageVersion -VersionMetadata (Get-JsonProperty $entry 'version')
+if ($null -eq $patchedBuild -and
+    @(ConvertTo-Array (Get-JsonProperty $entry 'patchedBuilds')).Count -gt 0 -and
+    -not [string]::Equals($packageVersion, $upstreamVersion, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "No patchedBuilds metadata matches Winlibs rebuild tag '$Version' for '$componentName'. Add the exact tag before generating its SBOM."
+}
 $sourceTag = [string](Get-JsonProperty $upstream 'tag')
 if ([string]::IsNullOrWhiteSpace($sourceTag)) {
     $sourceTag = Expand-Template -Template (Get-JsonProperty $upstream 'tagTemplate') -Values (Get-TemplateValues -Component $componentName -LibraryName $Library -PackageVersion $packageVersion -UpstreamVersion $upstreamVersion -InputTag $Version)
