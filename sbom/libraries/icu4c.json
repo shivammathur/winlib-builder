@@ -17,5 +17,82 @@
   "license": {
     "id": "Unicode-DFS-2016"
   },
-  "purl": "pkg:generic/icu@{upstreamVersion}"
+  "purl": "pkg:generic/icu@{upstreamVersion}",
+  "cpe": "cpe:2.3:a:unicode:international_components_for_unicode:{upstreamVersion}:*:*:*:*:*:*:*",
+  "patchedBuilds": [
+    {
+      "tag": "icu4c-71.1-1",
+      "upstream": {
+        "repository": "unicode-org/icu",
+        "tag": "release-71-1",
+        "version": "71.1"
+      },
+      "fork": {
+        "repository": "winlibs/icu4c",
+        "tag": "icu4c-71.1-1"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-5222",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-5222",
+          "detail": "Fixed by backporting the ICU genrb buffer-overflow and filename-handling hardening to ICU 71.1.",
+          "references": [
+            "https://github.com/winlibs/icu4c/commit/707e311c6c78efb721d431953c6f0f7df4ccb82b",
+            "https://github.com/unicode-org/icu/commit/2c667e31cfd0b6bb1923627a932fd3453a5bac77",
+            "https://github.com/unicode-org/icu/commit/76a06f2f03630a9e4a677f8ce4e4a7d36b425aa8"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "icu4c-72.1-1",
+      "upstream": {
+        "repository": "unicode-org/icu",
+        "tag": "release-72-1",
+        "version": "72.1"
+      },
+      "fork": {
+        "repository": "winlibs/icu4c",
+        "tag": "icu4c-72.1-1"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-5222",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-5222",
+          "detail": "Fixed by backporting the ICU genrb buffer-overflow and filename-handling hardening to ICU 72.1.",
+          "references": [
+            "https://github.com/winlibs/icu4c/commit/c4b64c7513cd7c94c19eb2745f721be4bff194de",
+            "https://github.com/unicode-org/icu/commit/2c667e31cfd0b6bb1923627a932fd3453a5bac77",
+            "https://github.com/unicode-org/icu/commit/76a06f2f03630a9e4a677f8ce4e4a7d36b425aa8"
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "icu4c-77.1-1",
+      "upstream": {
+        "repository": "unicode-org/icu",
+        "tag": "release-77-1",
+        "version": "77.1"
+      },
+      "fork": {
+        "repository": "winlibs/icu4c",
+        "tag": "icu4c-77.1-1"
+      },
+      "fixedCves": [
+        {
+          "id": "CVE-2025-5222",
+          "source": "NVD",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-5222",
+          "detail": "Fixed by backporting the ICU genrb filename-handling hardening to ICU 77.1.",
+          "references": [
+            "https://github.com/winlibs/icu4c/commit/11bca20cc331c2ad3d38e240e5921ebfad8fe523",
+            "https://github.com/unicode-org/icu/commit/76a06f2f03630a9e4a677f8ce4e4a7d36b425aa8"
+          ]
+        }
+      ]
+    }
+  ]
 }
