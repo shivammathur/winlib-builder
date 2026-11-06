@@ -1,0 +1,20 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -277,7 +277,7 @@
+             PUBLIC_HEADER "${ZLIB_PUBLIC_HDRS}")
+ 
+     if(MSVC)
+-        set_target_properties(zlib PROPERTIES OUTPUT_NAME libz)
++        set_target_properties(zlib PROPERTIES OUTPUT_NAME z)
+     else(MSVC)
+         set_target_properties(zlib PROPERTIES OUTPUT_NAME z)
+     endif(MSVC)
+@@ -324,7 +324,7 @@
+     if(MSVC)
+         set_target_properties(zlibstatic
+             PROPERTIES
+-                ARCHIVE_OUTPUT_NAME libz${zlib_static_suffix})
++                ARCHIVE_OUTPUT_NAME z${zlib_static_suffix})
+     else(MSVC)
+         set_target_properties(zlibstatic
+             PROPERTIES

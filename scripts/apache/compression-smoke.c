@@ -14,7 +14,7 @@ int main(void) {
     gzFile file;
     size_t i;
 
-    CHECK(strcmp(zlibVersion(), "1.3.2") == 0);
+    CHECK(strcmp(zlibVersion(), "1.4") == 0);
     CHECK(BrotliDecoderVersion() == 0x01002001);
     CHECK(BrotliEncoderVersion() == 0x01002001);
     for (i = 0; i < sizeof(input); i++) input[i] = (unsigned char)(i * 37 + i / 23);
