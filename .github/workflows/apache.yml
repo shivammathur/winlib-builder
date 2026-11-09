@@ -176,3 +176,18 @@ jobs:
         with:
           name: apache-${{ env.APACHE_VERSION }}-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
           path: install
+
+      - name: Bundle Apache runtime for integration tests
+        shell: pwsh
+        run: |
+          Copy-Item '${{ steps.deps.outputs.deps_root }}/bin/*.dll' apache-install/bin -Force
+          Copy-Item '${{ steps.deps.outputs.apriconv_root }}/bin/*.dll' apache-install/bin -Force
+          New-Item apache-install/share -ItemType Directory -Force | Out-Null
+          Copy-Item install/share/* apache-install/share -Recurse -Force
+          & ./apache-install/bin/httpd.exe -v
+
+      - name: Upload Apache runtime for integration tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: httpd-runtime-${{ steps.virtuals.outputs.vs }}-${{ matrix.arch }}
+          path: apache-install
